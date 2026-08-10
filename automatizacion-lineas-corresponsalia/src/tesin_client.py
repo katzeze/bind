@@ -60,7 +60,7 @@ class TesinClient:
             context.set_default_timeout(self.cfg.get("timeout_segundos", 45) * 1000)
             page = context.new_page()
             try:
-                self._login(page)
+                page = self._login(page)
                 for banco in bancos:
                     codigo = banco["codigo"]
                     resultados[codigo] = self._extraer_banco(page, codigo)
@@ -70,6 +70,33 @@ class TesinClient:
 
     def _login(self, page):
         page.goto(self._url(self.cfg["login_page"]))
+        page.wait_for_load_state("networkidle")
+        self._dump(page, "portada")
+
+        # La entrada de Tesin es una portada: el formulario de usuario y
+        # contraseña aparece recién después de apretar el botón "Ingresar".
+        if page.locator("input[type='password']:visible").count() == 0:
+            texto = self.cfg.get("texto_boton_ingresar") or "Ingresar"
+            for candidato in (
+                page.get_by_role("button", name=texto),
+                page.get_by_role("link", name=texto),
+                page.get_by_text(texto),
+            ):
+                if candidato.count() > 0:
+                    candidato.first.click()
+                    break
+            else:
+                raise RuntimeError(
+                    f"No se encontró el botón '{texto}' en la portada de Tesin. "
+                    "Revisar debug/ y ajustar 'texto_boton_ingresar' en config.yaml."
+                )
+            page.wait_for_load_state("networkidle")
+            # Si el formulario se abrió en otra pestaña, se sigue en esa.
+            for otra in page.context.pages:
+                if otra.locator("input[type='password']").count() > 0:
+                    page = otra
+                    break
+            page.wait_for_selector("input[type='password']:visible")
         self._dump(page, "login")
 
         sel_user = self.cfg.get("selector_usuario") or "input[type='text']:visible"

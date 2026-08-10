@@ -9,6 +9,9 @@ tesin:
   ignorar_errores_tls: true
   timeout_segundos: 45
 
+  # Texto del botón de la portada que lleva al formulario de login.
+  texto_boton_ingresar: "Ingresar"
+
   # Selectores de la página de login. Los valores por defecto (null) hacen que el
   # script use el primer campo de texto y el primer campo de contraseña visibles,
   # que es lo habitual en aplicaciones GeneXus como Tesin. Si el login falla,
