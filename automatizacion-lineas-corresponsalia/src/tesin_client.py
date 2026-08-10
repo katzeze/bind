@@ -146,6 +146,7 @@ class TesinClient:
                 "El login parece haber fallado (sigue visible el campo de contraseña). "
                 "Verificar credenciales o ajustar selectores en config.yaml."
             )
+        return page
 
     def _extraer_banco(self, page, codigo: str) -> dict[str, float]:
         # La sesión ya está iniciada: se puede ir directo a la grilla de líneas.
