@@ -1,0 +1,55 @@
+# Configuración de la automatización de Líneas de Corresponsalía
+# Tesin -> Google Sheets
+
+tesin:
+  base_url: "https://tesin.bind.com.ar:8443/TSNComexCore/servlet"
+  login_page: "com.tsncomexcore.enter"
+  lineas_page: "com.tsncomexcore.wplineacreditocorre"
+  # Tesin suele usar certificado interno; si el navegador rechaza el TLS, dejar en true
+  ignorar_errores_tls: true
+  timeout_segundos: 45
+
+  # Selectores de la página de login. Los valores por defecto (null) hacen que el
+  # script use el primer campo de texto y el primer campo de contraseña visibles,
+  # que es lo habitual en aplicaciones GeneXus como Tesin. Si el login falla,
+  # correr con --debug, mirar debug/01_login.html y completar los selectores acá.
+  selector_usuario: null      # ej: "input[name='vUSERID']"
+  selector_password: null     # ej: "input[name='vPASSWORD']"
+  selector_boton_login: null  # ej: "input[name='BUTTON1']" (si es null, envía con Enter)
+
+  # Selector del filtro de búsqueda por número de corresponsal en la grilla de
+  # "Líneas de Crédito Recibidas". Si es null, usa el primer campo de texto visible.
+  selector_filtro_corresponsal: null
+
+  # Textos con los que se identifican los conceptos en la pantalla de detalle.
+  # Se comparan sin mayúsculas ni acentos, por coincidencia parcial.
+  etiqueta_lc: "cartas de credito de importacion"
+  etiqueta_financ: "prestamos - financiaciones"
+  # Nombre de la columna del detalle de la que se toma el valor
+  etiqueta_columna_valor: "utilizado"
+  # Si la detección automática de la columna falla, fijar acá el índice (base 0)
+  indice_columna_valor: null
+
+sheet:
+  spreadsheet_id: "1k6-CFAp0XiD8ZSjmocCABXgXmy3SKX8V0hKTCbk-psI"  # LINEAS CORRESPONSALIA
+  worksheet: "Hoja 1"
+
+# Corresponsales a procesar: número con el que se buscan en Tesin y encabezado
+# de la columna correspondiente en la hoja de cálculo.
+# COMPLETAR los códigos que faltan (se buscan en Tesin > Corresponsales >
+# Líneas de Crédito Recibidas, igual que en el proceso manual).
+bancos:
+  - codigo: "9524"
+    columna: "BNA"
+  - codigo: ""          # completar
+    columna: "SCH"
+  - codigo: ""          # completar
+    columna: "CMZ"
+  - codigo: ""          # completar
+    columna: "IFC"
+  - codigo: ""          # completar
+    columna: "JPM"
+  - codigo: ""          # completar
+    columna: "BLDX"
+  - codigo: ""          # completar
+    columna: "BID"
