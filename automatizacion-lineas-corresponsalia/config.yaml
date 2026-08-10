@@ -41,15 +41,15 @@ sheet:
 bancos:
   - codigo: "9524"
     columna: "BNA"
-  - codigo: ""          # completar
+  - codigo: "9777"          # completar
     columna: "SCH"
-  - codigo: ""          # completar
+  - codigo: "9871"          # completar
     columna: "CMZ"
-  - codigo: ""          # completar
+  - codigo: "10739"          # completar
     columna: "IFC"
-  - codigo: ""          # completar
+  - codigo: "9600"          # completar
     columna: "JPM"
-  - codigo: ""          # completar
+  - codigo: "9923"          # completar
     columna: "BLDX"
-  - codigo: ""          # completar
+  - codigo: "14464"          # completar
     columna: "BID"
