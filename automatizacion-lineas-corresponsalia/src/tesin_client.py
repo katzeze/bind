@@ -179,6 +179,14 @@ class TesinClient:
         else:
             fila.locator("td").filter(has_text=codigo).first.click()
         self._esperar(page)
+        # El contenido del detalle llega por AJAX después de abrirse la página:
+        # esperar a que el concepto buscado esté efectivamente en pantalla.
+        try:
+            page.wait_for_selector(
+                f"text=/{re.escape(self.cfg['etiqueta_lc'])}/i", timeout=20000
+            )
+        except Exception:
+            pass
         self._dump(page, f"detalle_{codigo}")
 
         lc = self._leer_valor_detalle(page, self.cfg["etiqueta_lc"])
