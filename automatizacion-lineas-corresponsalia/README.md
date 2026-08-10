@@ -1,5 +1,10 @@
 # Automatización — Líneas de Corresponsalía (Tesin → Google Sheets)
 
+> **Instalación sin usar la consola:** hacé doble clic en `1-INSTALAR.bat`
+> (una sola vez), después en `2-PROBAR.bat` (prueba que no toca la hoja) y,
+> cuando la prueba dé bien, `3-ACTUALIZAR-HOJA.bat` es el que carga los datos.
+> Lo que sigue abajo es el detalle equivalente por línea de comandos.
+
 Reemplaza la carga manual semanal: el script entra a Tesin con un navegador
 headless, busca cada banco corresponsal en **Corresponsales → Líneas de
 Crédito Recibidas**, toma el **utilizado** de *Cartas de Crédito de
