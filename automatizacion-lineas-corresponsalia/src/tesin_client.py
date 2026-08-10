@@ -38,6 +38,16 @@ class TesinClient:
     def _url(self, page: str) -> str:
         return f"{self.cfg['base_url']}/{page}"
 
+    def _esperar(self, page):
+        """Espera a que la página se asiente. Las pantallas de Tesin mantienen
+        conexiones abiertas, así que 'networkidle' puede no llegar nunca: si no
+        llega en unos segundos, se sigue con una pausa fija."""
+        try:
+            page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(2000)
+
     def _dump(self, page, nombre: str):
         if not self.debug_dir:
             return
@@ -64,13 +74,20 @@ class TesinClient:
                 for banco in bancos:
                     codigo = banco["codigo"]
                     resultados[codigo] = self._extraer_banco(page, codigo)
+            except Exception:
+                # Captura del estado exacto en el que se produjo la falla.
+                try:
+                    self._dump(page, "ERROR")
+                except Exception:
+                    pass
+                raise
             finally:
                 browser.close()
         return resultados
 
     def _login(self, page):
         page.goto(self._url(self.cfg["login_page"]))
-        page.wait_for_load_state("networkidle")
+        self._esperar(page)
         self._dump(page, "portada")
 
         # La entrada de Tesin es una portada: el formulario de usuario y
@@ -90,7 +107,7 @@ class TesinClient:
                     f"No se encontró el botón '{texto}' en la portada de Tesin. "
                     "Revisar debug/ y ajustar 'texto_boton_ingresar' en config.yaml."
                 )
-            page.wait_for_load_state("networkidle")
+            self._esperar(page)
             # Si el formulario se abrió en otra pestaña, se sigue en esa.
             for otra in page.context.pages:
                 if otra.locator("input[type='password']").count() > 0:
@@ -117,7 +134,7 @@ class TesinClient:
                 boton.first.click()
             else:
                 page.locator(sel_pass).first.press("Enter")
-        page.wait_for_load_state("networkidle")
+        self._esperar(page)
         try:
             page.wait_for_selector("input[type='password']", state="hidden", timeout=15000)
         except Exception:
@@ -133,26 +150,53 @@ class TesinClient:
     def _extraer_banco(self, page, codigo: str) -> dict[str, float]:
         # La sesión ya está iniciada: se puede ir directo a la grilla de líneas.
         page.goto(self._url(self.cfg["lineas_page"]))
-        page.wait_for_load_state("networkidle")
+        self._esperar(page)
         self._dump(page, f"grilla_{codigo}")
 
-        sel_filtro = self.cfg.get("selector_filtro_corresponsal") or "input[type='text']:visible"
-        filtro = page.locator(sel_filtro).first
+        filtro = self._buscar_filtro(page)
         filtro.fill(codigo)
         filtro.press("Enter")
-        page.wait_for_load_state("networkidle")
+        self._esperar(page)
         self._dump(page, f"busqueda_{codigo}")
 
-        # En las grillas GeneXus el detalle se abre desde un link en la fila.
+        # En las grillas GeneXus el detalle se abre desde un link en la fila;
+        # si la fila no tiene <a>, se hace clic sobre la celda con el código.
         fila = page.locator(f"tr:has-text('{codigo}')").first
-        link = fila.locator("a").first
-        link.click()
-        page.wait_for_load_state("networkidle")
+        if fila.count() == 0:
+            raise RuntimeError(
+                f"La búsqueda del corresponsal {codigo} no devolvió ninguna fila. "
+                "Verificar el código en config.yaml."
+            )
+        enlaces = fila.locator("a:visible")
+        if enlaces.count() > 0:
+            enlaces.first.click()
+        else:
+            fila.locator("td").filter(has_text=codigo).first.click()
+        self._esperar(page)
         self._dump(page, f"detalle_{codigo}")
 
         lc = self._leer_valor_detalle(page, self.cfg["etiqueta_lc"])
         financ = self._leer_valor_detalle(page, self.cfg["etiqueta_financ"])
         return {"lc": lc, "financ": financ}
+
+    def _buscar_filtro(self, page):
+        """Campo de búsqueda por corresponsal en la grilla, salteando el
+        buscador del menú lateral ('Buscar opción del menú...')."""
+        sel = self.cfg.get("selector_filtro_corresponsal")
+        if sel:
+            return page.locator(sel).first
+        for candidato in page.locator("input[type='text']:visible, input[type='search']:visible").all():
+            pista = normalizar(
+                (candidato.get_attribute("placeholder") or "")
+                + " " + (candidato.get_attribute("id") or "")
+            )
+            if "menu" in pista:
+                continue
+            return candidato
+        raise RuntimeError(
+            "No se encontró el campo de búsqueda en la grilla de líneas. "
+            "Revisar debug/ y fijar 'selector_filtro_corresponsal' en config.yaml."
+        )
 
     def _leer_valor_detalle(self, page, etiqueta: str) -> float:
         """Busca en las tablas del detalle la fila cuyo concepto contiene la
