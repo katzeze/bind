@@ -104,12 +104,24 @@ class TesinClient:
         page.locator(sel_user).first.fill(self.usuario)
         page.locator(sel_pass).first.fill(self.password)
 
+        # El formulario se envía con clic en el botón (Enter no lo dispara).
         sel_boton = self.cfg.get("selector_boton_login")
         if sel_boton:
             page.locator(sel_boton).first.click()
         else:
-            page.locator(sel_pass).first.press("Enter")
+            texto = self.cfg.get("texto_boton_ingresar") or "Ingresar"
+            boton = page.get_by_role("button", name=texto)
+            if boton.count() == 0:
+                boton = page.get_by_text(texto)
+            if boton.count() > 0:
+                boton.first.click()
+            else:
+                page.locator(sel_pass).first.press("Enter")
         page.wait_for_load_state("networkidle")
+        try:
+            page.wait_for_selector("input[type='password']", state="hidden", timeout=15000)
+        except Exception:
+            pass
         self._dump(page, "post_login")
 
         if page.locator("input[type='password']:visible").count() > 0:
