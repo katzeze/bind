@@ -34,8 +34,9 @@ tesin:
   indice_columna_valor: null
 
 sheet:
-  spreadsheet_id: "1k6-CFAp0XiD8ZSjmocCABXgXmy3SKX8V0hKTCbk-psI"  # LINEAS CORRESPONSALIA
-  worksheet: "Hoja 1"
+  # Archivo "COMEX FINANCIACIONES - CDIs", pestaña LINEAS
+  spreadsheet_id: "1X6eM9uvUTWJJdNMRhPwZA_JtNhD0yPp8WZEd84L7V4U"
+  worksheet: "LINEAS"
 
 # Corresponsales a procesar: número con el que se buscan en Tesin y encabezado
 # de la columna correspondiente en la hoja de cálculo.
