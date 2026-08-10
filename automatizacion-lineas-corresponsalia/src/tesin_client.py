@@ -156,8 +156,13 @@ class TesinClient:
 
         filtro = self._buscar_filtro(page)
         filtro.fill(codigo)
-        filtro.press("Enter")
+        # La búsqueda se dispara al salir del campo con Tab (Enter no filtra).
+        filtro.press("Tab")
         self._esperar(page)
+        try:
+            page.wait_for_selector(f"tr:has-text('{codigo}')", timeout=15000)
+        except Exception:
+            pass
         self._dump(page, f"busqueda_{codigo}")
 
         # En las grillas GeneXus el detalle se abre desde un link en la fila;
