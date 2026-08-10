@@ -6,9 +6,12 @@ parámetros cifrados y no se pueden construir a mano: la navegación se hace
 como lo haría una persona (buscar el corresponsal en la grilla y hacer clic).
 """
 
+import logging
 import re
 import unicodedata
 from pathlib import Path
+
+log = logging.getLogger("lineas")
 
 
 def normalizar(texto: str) -> str:
@@ -180,18 +183,35 @@ class TesinClient:
             fila.locator("td").filter(has_text=codigo).first.click()
         self._esperar(page)
         # El contenido del detalle llega por AJAX después de abrirse la página:
-        # esperar a que el concepto buscado esté efectivamente en pantalla.
+        # esperar a que aparezca el concepto buscado o el total de la línea
+        # (hay líneas que no desglosan conceptos y solo muestran el total).
         try:
             page.wait_for_selector(
-                f"text=/{re.escape(self.cfg['etiqueta_lc'])}/i", timeout=20000
+                f"text=/{re.escape(self.cfg['etiqueta_lc'])}/i, text=/total de la l/i",
+                timeout=20000,
             )
         except Exception:
             pass
         self._dump(page, f"detalle_{codigo}")
 
-        lc = self._leer_valor_detalle(page, self.cfg["etiqueta_lc"])
-        financ = self._leer_valor_detalle(page, self.cfg["etiqueta_financ"])
+        lc = self._leer_concepto(page, self.cfg["etiqueta_lc"], codigo)
+        financ = self._leer_concepto(page, self.cfg["etiqueta_financ"], codigo)
         return {"lc": lc, "financ": financ}
+
+    def _leer_concepto(self, page, etiqueta: str, codigo: str) -> float:
+        try:
+            return self._leer_valor_detalle(page, etiqueta)
+        except RuntimeError:
+            # Igual que en el proceso manual: si la línea no desglosa el
+            # concepto, el utilizado es 0. Solo se asume 0 con el detalle
+            # efectivamente cargado (se ve el total de la línea).
+            if page.get_by_text(re.compile("total de la l", re.IGNORECASE)).count() > 0:
+                log.warning(
+                    "Corresponsal %s: sin renglón '%s' en el detalle; se toma 0,00.",
+                    codigo, etiqueta,
+                )
+                return 0.0
+            raise
 
     def _buscar_filtro(self, page):
         """Campo de búsqueda por corresponsal en la grilla, salteando el
