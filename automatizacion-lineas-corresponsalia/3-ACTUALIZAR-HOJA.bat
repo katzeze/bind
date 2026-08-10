@@ -7,9 +7,10 @@ if not exist .venv\Scripts\python.exe (
     pause
     exit /b 1
 )
-if not exist service_account.json (
-    echo Falta el archivo "service_account.json" de Google en esta
-    echo carpeta ^(ver paso 2 del README, o pedirselo a Claude^).
+if not exist service_account.json if not exist client_secret.json (
+    echo Falta la credencial de Google en esta carpeta: puede ser
+    echo "service_account.json" o "client_secret.json" ^(ver README,
+    echo paso 2, o pedir ayuda a Claude^).
     pause
     exit /b 1
 )

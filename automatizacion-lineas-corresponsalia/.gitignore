@@ -1,5 +1,7 @@
 .env
 service_account.json
+client_secret.json
+token_google.json
 debug/
 logs/
 __pycache__/

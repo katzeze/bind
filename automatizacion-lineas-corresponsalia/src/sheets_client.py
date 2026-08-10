@@ -5,16 +5,44 @@ filas UTILIZADO/LC y UTILIZADO/FINANC, así la automatización no se rompe si se
 insertan filas o columnas en la hoja.
 """
 
+from pathlib import Path
+
 import gspread
 from google.oauth2.service_account import Credentials
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
+def _autorizar(service_account_file: str) -> gspread.Client:
+    """Dos formas de acceso, en este orden:
+
+    1. service_account.json: cuenta de servicio (requiere compartirle la hoja).
+    2. client_secret.json: OAuth como el propio usuario dueño de la hoja; la
+       primera vez abre el navegador para autorizar y guarda el permiso en
+       token_google.json para las corridas siguientes. No requiere compartir
+       la hoja con ninguna cuenta externa.
+    """
+    sa = Path(service_account_file)
+    if sa.exists():
+        creds = Credentials.from_service_account_file(str(sa), scopes=SCOPES)
+        return gspread.authorize(creds)
+    carpeta = sa.parent
+    cliente = carpeta / "client_secret.json"
+    if cliente.exists():
+        return gspread.oauth(
+            credentials_filename=str(cliente),
+            authorized_user_filename=str(carpeta / "token_google.json"),
+            scopes=SCOPES,
+        )
+    raise RuntimeError(
+        "Falta la credencial de Google: poner service_account.json o "
+        "client_secret.json en la carpeta del proyecto (ver README, paso 2)."
+    )
+
+
 class SheetsClient:
     def __init__(self, config: dict, service_account_file: str):
-        creds = Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
-        gc = gspread.authorize(creds)
+        gc = _autorizar(service_account_file)
         libro = gc.open_by_key(config["spreadsheet_id"])
         try:
             self.hoja = libro.worksheet(config["worksheet"])

@@ -35,19 +35,30 @@ El archivo `.env` queda solo en tu máquina (está en `.gitignore`, nunca se sub
 al repositorio). **Recomendado:** pedile a Sistemas/SegInfo un usuario de
 servicio de solo consulta para Tesin, en lugar de usar tu usuario personal.
 
-### 2. Acceso a Google Sheets (cuenta de servicio)
+### 2. Acceso a Google Sheets (elegir UNA de las dos opciones)
 
-1. En [Google Cloud Console](https://console.cloud.google.com/) creá un
-   proyecto (o usá uno del área), habilitá la **Google Sheets API** y creá una
-   **cuenta de servicio** con una clave JSON.
-2. Guardá el JSON como `service_account.json` en esta carpeta (también está
-   en `.gitignore`).
-3. Compartí la hoja **LINEAS CORRESPONSALIA** con el mail de la cuenta de
-   servicio (algo como `xxx@proyecto.iam.gserviceaccount.com`) con permiso de
-   **Editor**.
+**Opción A — OAuth como el propio usuario (recomendada si el Workspace del
+banco bloquea compartir con cuentas externas):** el robot entra a Google como
+vos, así que no hay que compartir la hoja con nadie.
 
-Si el banco tiene Google Workspace administrado, coordiná este paso con
-SegInfo/Sistemas.
+1. En [Google Cloud Console](https://console.cloud.google.com/), con la cuenta
+   corporativa, creá un proyecto y habilitá la **Google Sheets API**.
+2. En **Pantalla de consentimiento de OAuth** elegí tipo **Interno** y guardá.
+3. En **Credenciales → Crear credenciales → ID de cliente de OAuth → App de
+   escritorio**, creá la credencial y descargá el JSON.
+4. Guardalo como `client_secret.json` en esta carpeta.
+5. La primera corrida real abre el navegador para autorizar con tu cuenta
+   (una sola vez); el permiso queda en `token_google.json`.
+
+**Opción B — Cuenta de servicio:** creá una **cuenta de servicio** con clave
+JSON en el mismo proyecto, guardá el archivo como `service_account.json` en
+esta carpeta y compartí la hoja **LINEAS CORRESPONSALIA** con el mail de esa
+cuenta (algo como `xxx@proyecto.iam.gserviceaccount.com`) como **Editor**.
+Requiere que el Workspace permita compartir con esa cuenta.
+
+Los tres archivos (`client_secret.json`, `token_google.json`,
+`service_account.json`) están en `.gitignore`: quedan solo en la máquina.
+Si algo del Workspace está bloqueado, coordiná con SegInfo/Sistemas.
 
 ### 3. Códigos de los bancos
 
