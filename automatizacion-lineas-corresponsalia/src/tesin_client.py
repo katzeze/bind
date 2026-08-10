@@ -208,17 +208,26 @@ class TesinClient:
             "Revisar debug/ y fijar 'selector_filtro_corresponsal' en config.yaml."
         )
 
+    IMPORTE_RE = r"-?\d[\d.]*,\d{2}"
+
+    def _indice_valor(self, cantidad: int) -> int:
+        """Posición del importe 'Utilizado' entre los importes de la fila."""
+        fijo = self.cfg.get("indice_columna_valor")
+        if fijo is not None:
+            return min(int(fijo), cantidad - 1)
+        # El detalle muestra Asignado | Utilizado | Saldo: Utilizado es el 2do.
+        return 1 if cantidad >= 3 else cantidad - 1
+
     def _leer_valor_detalle(self, page, etiqueta: str) -> float:
-        """Busca en las tablas del detalle la fila cuyo concepto contiene la
-        etiqueta y devuelve el importe de la columna 'Utilizado'."""
+        """Busca la fila cuyo concepto contiene la etiqueta y devuelve el
+        importe de la columna 'Utilizado'."""
         etiqueta_norm = normalizar(etiqueta)
-        col_valor = self.cfg.get("indice_columna_valor")
         etiqueta_col = normalizar(self.cfg.get("etiqueta_columna_valor", "utilizado"))
 
+        # 1) Grillas armadas con <table>, ubicando la columna por su encabezado.
         for tabla in page.locator("table").all():
-            filas = tabla.locator("tr").all()
-            indice_col = col_valor
-            for fila in filas:
+            indice_col = None
+            for fila in tabla.locator("tr").all():
                 celdas = [c.inner_text() for c in fila.locator("td, th").all()]
                 celdas_norm = [normalizar(c) for c in celdas]
                 if indice_col is None and etiqueta_col in celdas_norm:
@@ -227,12 +236,22 @@ class TesinClient:
                 if any(etiqueta_norm in c for c in celdas_norm):
                     if indice_col is not None and indice_col < len(celdas):
                         return parsear_importe(celdas[indice_col])
-                    # Sin encabezado detectado: se toma el último importe de la fila
-                    for celda in reversed(celdas):
-                        try:
-                            return parsear_importe(celda)
-                        except ValueError:
-                            continue
+                    importes = re.findall(self.IMPORTE_RE, " | ".join(celdas))
+                    if importes:
+                        return parsear_importe(importes[self._indice_valor(len(importes))])
+
+        # 2) Genérico (grillas sin <table>): se ubica el texto del concepto y
+        # se sube por sus contenedores hasta encontrar la fila con importes.
+        for elemento in page.get_by_text(re.compile(re.escape(etiqueta), re.IGNORECASE)).all():
+            contenedor = elemento
+            for _ in range(5):
+                contenedor = contenedor.locator("xpath=..")
+                if contenedor.count() == 0:
+                    break
+                importes = re.findall(self.IMPORTE_RE, contenedor.inner_text())
+                if importes:
+                    return parsear_importe(importes[self._indice_valor(len(importes))])
+
         raise RuntimeError(
             f"No se encontró el concepto '{etiqueta}' en la pantalla de detalle. "
             "Correr con --debug y revisar los archivos en debug/ para ajustar "
