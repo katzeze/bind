@@ -186,10 +186,14 @@ class TesinClient:
         sel = self.cfg.get("selector_filtro_corresponsal")
         if sel:
             return page.locator(sel).first
-        for candidato in page.locator("input[type='text']:visible, input[type='search']:visible").all():
+        for candidato in page.locator("input:visible").all():
+            tipo = (candidato.get_attribute("type") or "text").lower()
+            if tipo not in ("text", "search", "tel", "number"):
+                continue
             pista = normalizar(
                 (candidato.get_attribute("placeholder") or "")
                 + " " + (candidato.get_attribute("id") or "")
+                + " " + (candidato.get_attribute("name") or "")
             )
             if "menu" in pista:
                 continue
