@@ -1,15 +1,14 @@
 """Generador de planes de negocios por CUIT — Bind Banco Industrial.
 
-Flujo: se ingresa un CUIT, la app releva razón social (padrón ARCA),
-resumen de actividad, sitio web e importaciones 2024/2025 (fuente
-configurable + búsqueda web), calcula el proyectado 2026 (promedio
-2024-2025 + 10%), arma el PDF y, previa confirmación del usuario,
-lo envía por mail.
+Flujo: se ingresa un CUIT, la app releva razón social e importaciones
+2024/2025 desde la base ANA IMPO (Excel) y el padrón ARCA, busca en la
+web el resumen de actividad y el sitio oficial, calcula el proyectado
+2026 (promedio 2024-2025 + 10%), arma el PDF con el formato del banco
+y, previa confirmación del usuario, lo envía por mail al equipo COMEX.
 """
 
 import asyncio
 import logging
-import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -17,17 +16,16 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .services import enrichment, imports_provider, mailer, padron, pdf
+from . import config
+from .services import base_impo, enrichment, mailer, padron, pdf
 from .services.cuit import cuit_valido, formatear_cuit, normalizar_cuit
 from .services.projection import proyectar_2026
 
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="Generador de Plan de Negocios", version="1.0.0")
+app = FastAPI(title="Generador de Plan de Negocios", version="2.0.0")
 
 _STATIC = Path(__file__).parent / "static"
-
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ConsultaCuit(BaseModel):
@@ -46,7 +44,6 @@ class DatosPlan(BaseModel):
 
 class EnvioMail(BaseModel):
     datos: DatosPlan
-    destinatario: str
 
 
 def _validar_cuit(valor: str) -> str:
@@ -78,23 +75,26 @@ async def index() -> FileResponse:
     return FileResponse(_STATIC / "index.html")
 
 
+@app.get("/api/envio-config")
+async def envio_config() -> dict:
+    """Destinatarios y cuerpo fijos del mail, para mostrarlos en la UI."""
+    return {"destinatarios": config.MAIL_DESTINATARIOS, "cuerpo": config.MAIL_CUERPO}
+
+
 @app.post("/api/empresa")
 async def consultar_empresa(consulta: ConsultaCuit) -> dict:
     """Releva los datos de la empresa y devuelve el borrador editable."""
     cuit = _validar_cuit(consulta.cuit)
 
-    razon_social, importaciones = await asyncio.gather(
+    fila_base, razon_padron = await asyncio.gather(
+        asyncio.to_thread(base_impo.buscar, cuit),
         padron.buscar_razon_social(cuit),
-        imports_provider.buscar_importaciones(cuit),
     )
+    razon_social = razon_padron or (fila_base or {}).get("razon_social")
     web = await asyncio.to_thread(enrichment.enriquecer_empresa, cuit, razon_social)
 
-    imp_2024 = importaciones["2024"]
-    imp_2025 = importaciones["2025"]
-    if imp_2024 is None:
-        imp_2024 = web["importaciones_2024_usd"]
-    if imp_2025 is None:
-        imp_2025 = web["importaciones_2025_usd"]
+    imp_2024 = (fila_base or {}).get("fob_2024")
+    imp_2025 = (fila_base or {}).get("fob_2025")
 
     proyectado = None
     if imp_2024 is not None and imp_2025 is not None:
@@ -103,6 +103,7 @@ async def consultar_empresa(consulta: ConsultaCuit) -> dict:
     return {
         "cuit": cuit,
         "cuit_formateado": formatear_cuit(cuit),
+        "en_base_impo": fila_base is not None,
         "razon_social": razon_social or web["razon_social"],
         "resumen": web["resumen"],
         "sitio_web": web["sitio_web"],
@@ -127,28 +128,24 @@ async def generar_pdf(datos: DatosPlan) -> Response:
 
 @app.post("/api/enviar")
 async def enviar_por_mail(envio: EnvioMail) -> dict:
-    """Regenera el PDF y lo envía por mail al destinatario indicado."""
-    if not _EMAIL_RE.match(envio.destinatario.strip()):
-        raise HTTPException(status_code=422, detail="El mail del destinatario no es válido.")
-
+    """Regenera el PDF y lo envía por mail a los destinatarios configurados."""
     datos_pdf = _armar_datos_pdf(envio.datos)
+    if not datos_pdf["razon_social"]:
+        raise HTTPException(
+            status_code=422,
+            detail="Falta la razón social: se usa en el asunto del mail.",
+        )
+
     contenido = await asyncio.to_thread(pdf.generar_pdf, datos_pdf)
     nombre = f"plan-negocios-{datos_pdf['cuit']}.pdf"
-    razon_social = datos_pdf["razon_social"] or f"CUIT {formatear_cuit(datos_pdf['cuit'])}"
-
-    cuerpo = (
-        f"Se adjunta el plan de negocios de {razon_social} "
-        f"(CUIT {formatear_cuit(datos_pdf['cuit'])}), generado automáticamente.\n\n"
-        "Recordá que el documento es un borrador interno y debe ser revisado "
-        "antes de usarse en comunicaciones externas o decisiones crediticias."
-    )
+    asunto = f"Plan de Negocios {datos_pdf['razon_social']}"
 
     try:
         await asyncio.to_thread(
             mailer.enviar_plan,
-            envio.destinatario.strip(),
-            f"Plan de negocios — {razon_social}",
-            cuerpo,
+            config.MAIL_DESTINATARIOS,
+            asunto,
+            config.MAIL_CUERPO,
             contenido,
             nombre,
         )
@@ -157,7 +154,11 @@ async def enviar_por_mail(envio: EnvioMail) -> dict:
     except Exception as exc:  # noqa: BLE001 - errores SMTP hacia el usuario
         raise HTTPException(status_code=502, detail=f"No se pudo enviar el mail: {exc}") from exc
 
-    return {"ok": True, "mensaje": f"Plan enviado a {envio.destinatario.strip()}."}
+    return {
+        "ok": True,
+        "mensaje": f"Plan enviado a {len(config.MAIL_DESTINATARIOS)} destinatarios.",
+        "destinatarios": config.MAIL_DESTINATARIOS,
+    }
 
 
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

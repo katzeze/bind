@@ -50,3 +50,38 @@ def test_generar_pdf_completo():
 def test_generar_pdf_sin_datos_opcionales():
     pdf = generar_pdf({"cuit": "30581892981"})
     assert pdf.startswith(b"%PDF")
+
+
+def test_base_impo_lee_excel(tmp_path, monkeypatch):
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Datos Filtrados"
+    ws.append(["CUIT", "Razon Social", "FOB 2025", "FOB 2024"])
+    ws.append([30581892981.0, "EMPRESA DE PRUEBA SA", 2500000.5, 1500000.25])
+    ws.append(["texto invalido", "OTRA", 1, 2])
+    ruta = tmp_path / "base.xlsx"
+    wb.save(ruta)
+
+    from app import config
+    from app.services import base_impo
+
+    monkeypatch.setattr(config, "BASE_IMPO_XLSX", str(ruta))
+    base_impo.recargar()
+
+    fila = base_impo.buscar("30-58189298-1")
+    assert fila == {
+        "razon_social": "EMPRESA DE PRUEBA SA",
+        "fob_2024": 1500000.25,
+        "fob_2025": 2500000.5,
+    }
+    assert base_impo.buscar("20-12345678-6") is None
+
+
+def test_destinatarios_configurados():
+    from app import config
+
+    assert "gjaphet@bind.com.ar" in config.MAIL_DESTINATARIOS
+    assert len(config.MAIL_DESTINATARIOS) == 6
+    assert "COMEX" in config.MAIL_CUERPO

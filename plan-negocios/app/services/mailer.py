@@ -6,15 +6,19 @@ from email.message import EmailMessage
 from .. import config
 
 
-def enviar_plan(destinatario: str, asunto: str, cuerpo: str, pdf: bytes, nombre_pdf: str) -> None:
+def enviar_plan(
+    destinatarios: list[str], asunto: str, cuerpo: str, pdf: bytes, nombre_pdf: str
+) -> None:
     if not config.SMTP_HOST:
         raise RuntimeError(
             "SMTP no configurado: definí SMTP_HOST (y credenciales) en el entorno."
         )
+    if not destinatarios:
+        raise RuntimeError("No hay destinatarios configurados para el envío.")
 
     mensaje = EmailMessage()
     mensaje["From"] = config.SMTP_FROM
-    mensaje["To"] = destinatario
+    mensaje["To"] = ", ".join(destinatarios)
     mensaje["Subject"] = asunto
     mensaje.set_content(cuerpo)
     mensaje.add_attachment(

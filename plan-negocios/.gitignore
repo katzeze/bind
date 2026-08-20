@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .env
 .venv/
+# La base ANA IMPO contiene datos de clientes: no se versiona
+data/*.xlsx

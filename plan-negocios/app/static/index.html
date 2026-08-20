@@ -3,28 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Generador de Plan de Negocios</title>
+<title>Generador de Plan de Negocios — bind</title>
 <style>
   :root {
-    --azul: #1a3e6e;
-    --azul-claro: #eef3fa;
-    --gris: #555;
-    --borde: #d5dbe3;
+    --negro: #111111;
+    --amarillo: #f8ed09;
+    --amarillo-suave: #fdf9d0;
+    --gris: #5a5a5a;
+    --borde: #d9d9d9;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: #f4f6f9;
-    color: #222;
+    background: #f5f5f3;
+    color: var(--negro);
   }
   header {
-    background: var(--azul);
-    color: #fff;
-    padding: 18px 28px;
+    background: #fff;
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    border-bottom: 4px solid var(--amarillo);
   }
-  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
-  header p { margin: 4px 0 0; font-size: 13px; opacity: .85; }
+  header img { height: 42px; }
+  header div h1 { margin: 0; font-size: 18px; font-weight: 700; }
+  header div p { margin: 2px 0 0; font-size: 12px; color: var(--gris); }
   main { max-width: 860px; margin: 28px auto; padding: 0 16px; }
   .paso {
     background: #fff;
@@ -33,9 +38,14 @@
     padding: 22px 24px;
     margin-bottom: 18px;
   }
-  .paso h2 { margin: 0 0 12px; font-size: 16px; color: var(--azul); }
+  .paso h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    border-left: 5px solid var(--amarillo);
+    padding-left: 10px;
+  }
   label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
-  input[type=text], input[type=email], input[type=number], textarea {
+  input[type=text], input[type=number], textarea {
     width: 100%;
     padding: 9px 11px;
     border: 1px solid var(--borde);
@@ -45,38 +55,63 @@
   }
   textarea { min-height: 90px; resize: vertical; }
   button {
-    background: var(--azul);
-    color: #fff;
+    background: var(--negro);
+    color: var(--amarillo);
     border: 0;
     border-radius: 6px;
-    padding: 10px 20px;
+    padding: 10px 22px;
     font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
     margin-top: 14px;
   }
-  button.secundario { background: #fff; color: var(--azul); border: 1px solid var(--azul); }
+  button.secundario { background: #fff; color: var(--negro); border: 1.5px solid var(--negro); }
   button:disabled { opacity: .5; cursor: wait; }
   .fila { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
   .proyectado {
-    background: var(--azul-claro);
+    background: var(--amarillo-suave);
+    border: 1px solid var(--amarillo);
     border-radius: 6px;
     padding: 10px 12px;
     font-size: 14px;
-    margin-top: 12px;
+    font-weight: 600;
+    margin-top: 4px;
   }
   .aviso { font-size: 12px; color: var(--gris); margin-top: 10px; }
+  .alerta {
+    background: var(--amarillo-suave);
+    border: 1px solid var(--amarillo);
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-size: 13px;
+    margin-top: 12px;
+  }
   .error { color: #b00020; font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
   .ok { color: #1a7a3c; font-size: 14px; margin-top: 10px; font-weight: 600; }
   iframe { width: 100%; height: 560px; border: 1px solid var(--borde); border-radius: 6px; margin-top: 12px; }
   .oculto { display: none; }
   .acciones { display: flex; gap: 10px; flex-wrap: wrap; }
   .spinner { font-size: 13px; color: var(--gris); margin-top: 10px; }
+  .caja-mail {
+    background: #fafafa;
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .caja-mail dt { font-weight: 700; margin-top: 8px; }
+  .caja-mail dt:first-child { margin-top: 0; }
+  .caja-mail dd { margin: 2px 0 0; white-space: pre-wrap; color: #333; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Generador de Plan de Negocios</h1>
-  <p>Ingresá un CUIT, revisá los datos relevados, generá el PDF y envialo por mail. Uso interno — la información requiere revisión humana.</p>
+  <img src="/static/assets/logo_bind.png" alt="bind">
+  <div>
+    <h1>Generador de Plan de Negocios</h1>
+    <p>Negocios Internacionales — COMEX · Uso interno · La información requiere revisión humana</p>
+  </div>
 </header>
 <main>
 
@@ -85,12 +120,13 @@
     <label for="cuit">CUIT</label>
     <input type="text" id="cuit" placeholder="30-12345678-9" autocomplete="off">
     <button id="btn-buscar">Buscar datos</button>
-    <div class="spinner oculto" id="buscando">Relevando padrón, importaciones y datos web… puede demorar hasta un minuto.</div>
+    <div class="spinner oculto" id="buscando">Relevando base ANA IMPO, padrón y datos web… puede demorar hasta un minuto.</div>
     <div class="error oculto" id="error-cuit"></div>
   </section>
 
   <section class="paso oculto" id="paso-revision">
     <h2>2 · Revisá y completá los datos</h2>
+    <div class="alerta oculto" id="alerta-base">El CUIT no figura en la base ANA IMPO 2024/2025: cargá las importaciones a mano si corresponde.</div>
     <label for="razon">Razón social</label>
     <input type="text" id="razon">
     <label for="resumen">Resumen de actividad</label>
@@ -99,11 +135,11 @@
     <input type="text" id="web" placeholder="https://…">
     <div class="fila">
       <div>
-        <label for="imp2024">Importaciones 2024 (USD)</label>
+        <label for="imp2024">Importaciones FOB 2024 (USD)</label>
         <input type="number" id="imp2024" min="0" step="any">
       </div>
       <div>
-        <label for="imp2025">Importaciones 2025 (USD)</label>
+        <label for="imp2025">Importaciones FOB 2025 (USD)</label>
         <input type="number" id="imp2025" min="0" step="any">
       </div>
       <div>
@@ -111,7 +147,7 @@
         <div class="proyectado" id="proy2026">—</div>
       </div>
     </div>
-    <p class="aviso">El proyectado 2026 se calcula automáticamente: promedio 2024-2025 + 10%. Verificá los montos antes de generar el PDF.</p>
+    <p class="aviso">Importaciones: fuente base ANA IMPO 2024/2025. El proyectado 2026 se calcula automáticamente (promedio 2024-2025 + 10%). Verificá los datos antes de generar el PDF.</p>
     <button id="btn-pdf">Generar PDF</button>
     <div class="error oculto" id="error-revision"></div>
   </section>
@@ -121,15 +157,19 @@
     <iframe id="visor" title="Vista previa del PDF"></iframe>
     <div class="acciones">
       <button class="secundario" id="btn-corregir">Volver a editar</button>
-      <button id="btn-confirmar">Está OK — enviar por mail</button>
+      <button id="btn-confirmar">Está OK — pasar al envío</button>
     </div>
   </section>
 
   <section class="paso oculto" id="paso-mail">
-    <h2>4 · Envío por mail</h2>
-    <label for="destinatario">Mail del destinatario</label>
-    <input type="email" id="destinatario" placeholder="nombre@empresa.com.ar">
-    <button id="btn-enviar">Enviar</button>
+    <h2>4 · Confirmar envío por mail</h2>
+    <dl class="caja-mail">
+      <dt>Para</dt><dd id="mail-para">—</dd>
+      <dt>Asunto</dt><dd id="mail-asunto">—</dd>
+      <dt>Cuerpo</dt><dd id="mail-cuerpo">—</dd>
+      <dt>Adjunto</dt><dd id="mail-adjunto">—</dd>
+    </dl>
+    <button id="btn-enviar">Confirmar y enviar</button>
     <div class="spinner oculto" id="enviando">Enviando…</div>
     <div class="error oculto" id="error-mail"></div>
     <div class="ok oculto" id="ok-mail"></div>
@@ -140,10 +180,14 @@
 const $ = (id) => document.getElementById(id);
 let cuitActual = "";
 let urlPdf = null;
+let fuentesActuales = [];
+let configEnvio = { destinatarios: [], cuerpo: "" };
 
 const mostrar = (id) => $(id).classList.remove("oculto");
 const ocultar = (id) => $(id).classList.add("oculto");
 const setError = (id, msg) => { $(id).textContent = msg; mostrar(id); };
+
+fetch("/api/envio-config").then(r => r.json()).then(c => { configEnvio = c; }).catch(() => {});
 
 function numeroODefault(input) {
   const v = input.value.trim();
@@ -161,7 +205,6 @@ function datosActuales() {
     fuentes: fuentesActuales,
   };
 }
-let fuentesActuales = [];
 
 function actualizarProyeccion() {
   const a = numeroODefault($("imp2024"));
@@ -205,6 +248,7 @@ $("btn-buscar").addEventListener("click", async () => {
     $("web").value = d.sitio_web || "";
     $("imp2024").value = d.importaciones_2024 ?? "";
     $("imp2025").value = d.importaciones_2025 ?? "";
+    d.en_base_impo ? ocultar("alerta-base") : mostrar("alerta-base");
     actualizarProyeccion();
     mostrar("paso-revision");
     $("paso-revision").scrollIntoView({ behavior: "smooth" });
@@ -240,17 +284,20 @@ $("btn-corregir").addEventListener("click", () => {
 
 $("btn-confirmar").addEventListener("click", () => {
   ocultar("ok-mail"); ocultar("error-mail");
+  const razon = $("razon").value.trim() || "(sin razón social)";
+  $("mail-para").textContent = configEnvio.destinatarios.join("; ") || "(sin destinatarios configurados)";
+  $("mail-asunto").textContent = "Plan de Negocios " + razon;
+  $("mail-cuerpo").textContent = configEnvio.cuerpo;
+  $("mail-adjunto").textContent = "plan-negocios-" + cuitActual + ".pdf";
   mostrar("paso-mail");
   $("paso-mail").scrollIntoView({ behavior: "smooth" });
 });
 
 $("btn-enviar").addEventListener("click", async () => {
   ocultar("error-mail"); ocultar("ok-mail");
-  const destinatario = $("destinatario").value.trim();
-  if (!destinatario) { setError("error-mail", "Ingresá el mail del destinatario."); return; }
   $("btn-enviar").disabled = true; mostrar("enviando");
   try {
-    const resp = await llamarApi("/api/enviar", { datos: datosActuales(), destinatario });
+    const resp = await llamarApi("/api/enviar", { datos: datosActuales() });
     const d = await resp.json();
     $("ok-mail").textContent = d.mensaje;
     mostrar("ok-mail");
