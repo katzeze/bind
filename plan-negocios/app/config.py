@@ -8,8 +8,10 @@ def _bool(name: str, default: str = "true") -> bool:
 
 _RAIZ = Path(__file__).resolve().parent.parent
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5").strip()
+# Google Programmable Search (Custom Search JSON API) — nivel gratuito,
+# hasta 100 búsquedas por día. Ver README para cómo obtener estos datos.
+GOOGLE_SEARCH_API_KEY = os.getenv("GOOGLE_SEARCH_API_KEY", "").strip()
+GOOGLE_SEARCH_CX = os.getenv("GOOGLE_SEARCH_CX", "").strip()
 
 # Base ANA IMPO 2024/2025: fuente de importaciones y razón social
 BASE_IMPO_XLSX = os.getenv(

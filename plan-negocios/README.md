@@ -11,8 +11,8 @@ formato del banco y, previa confirmación, lo envía por mail al equipo COMEX.
 - **Importaciones FOB 2024 y 2025 (USD)** — desde la base ANA IMPO (Excel
   `BASE ANA IMPO filtrada 2024 Y 2025 OK`). Si el CUIT no figura, se pueden
   cargar a mano.
-- **Resumen de actividad y sitio web** — relevados en la web mediante la API
-  de Claude con la herramienta de búsqueda web.
+- **Resumen de actividad y sitio web** — relevados con Google Programmable
+  Search (Custom Search API), gratis hasta 100 búsquedas por día.
 - **Proyectado 2026** — calculado automáticamente: promedio de 2024 y 2025
   más 10%.
 
@@ -52,9 +52,30 @@ Abrir <http://localhost:8000>.
 |---|---|
 | `BASE_IMPO_XLSX` | Ruta al Excel de la base ANA IMPO (default `data/base_ana_impo_2024_2025.xlsx`). Columnas esperadas: CUIT, Razon Social, FOB 2025, FOB 2024. |
 | `MAIL_DESTINATARIOS` | Destinatarios del envío separados por `;`. Default: la lista fija del equipo COMEX definida en `app/config.py`. |
-| `ANTHROPIC_API_KEY` | Clave de la API de Claude. Sin ella la app funciona, pero el resumen y el sitio web se cargan a mano. |
-| `CLAUDE_MODEL` | Modelo a usar (default `claude-opus-5`). |
+| `GOOGLE_SEARCH_API_KEY`, `GOOGLE_SEARCH_CX` | Credenciales de Google Custom Search. Sin ellas la app funciona, pero el resumen y el sitio web se cargan a mano. Ver paso a paso abajo. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | Servidor de mail para el envío del PDF. |
+
+## Cómo sacar las credenciales gratuitas de Google (una sola vez)
+
+No hace falta saber programar, son dos pantallas de Google:
+
+1. **Crear el "motor de búsqueda"** (da el valor de `GOOGLE_SEARCH_CX`):
+   - Entrar a <https://programmablesearchengine.google.com/> con una cuenta
+     de Google (puede ser una del banco).
+   - "Agregar" un motor nuevo, ponerle un nombre (ej. "Plan de Negocios bind").
+   - En la configuración del motor, activar **"Buscar en toda la web"**.
+   - Copiar el **"ID del motor de búsqueda"** (search engine ID / `cx`) —
+     es un código como `a1b2c3d4e5f6g7h8i`.
+2. **Sacar la clave de API** (da el valor de `GOOGLE_SEARCH_API_KEY`):
+   - Entrar a <https://console.cloud.google.com/> con la misma cuenta.
+   - Crear un proyecto (o usar uno existente).
+   - Buscar **"Custom Search API"** en la biblioteca de APIs y habilitarla.
+   - Ir a "Credenciales" → "Crear credenciales" → "Clave de API" y copiarla.
+3. Pegar ambos valores en el archivo `.env` (`GOOGLE_SEARCH_API_KEY` y
+   `GOOGLE_SEARCH_CX`).
+
+El nivel gratuito permite 100 búsquedas por día; cada plan de negocios usa
+una sola búsqueda, así que alcanza de sobra para el uso normal del equipo.
 
 ## Tests
 

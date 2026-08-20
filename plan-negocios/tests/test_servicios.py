@@ -85,3 +85,54 @@ def test_destinatarios_configurados():
     assert "gjaphet@bind.com.ar" in config.MAIL_DESTINATARIOS
     assert len(config.MAIL_DESTINATARIOS) == 6
     assert "COMEX" in config.MAIL_CUERPO
+
+
+def test_google_search_sin_credenciales_devuelve_vacio(monkeypatch):
+    from app import config
+    from app.services import google_search
+
+    monkeypatch.setattr(config, "GOOGLE_SEARCH_API_KEY", "")
+    monkeypatch.setattr(config, "GOOGLE_SEARCH_CX", "")
+
+    assert google_search.buscar_empresa("cualquier cosa") == {
+        "sitio_web": None,
+        "resumen": None,
+        "fuentes": [],
+    }
+
+
+def test_google_search_filtra_dominios_no_oficiales(monkeypatch):
+    from app import config
+    from app.services import google_search
+
+    monkeypatch.setattr(config, "GOOGLE_SEARCH_API_KEY", "clave-test")
+    monkeypatch.setattr(config, "GOOGLE_SEARCH_CX", "cx-test")
+
+    class RespuestaFalsa:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "items": [
+                    {
+                        "link": "https://www.linkedin.com/company/toyota-argentina",
+                        "snippet": "Toyota Argentina en LinkedIn.",
+                    },
+                    {
+                        "link": "https://www.toyota.com.ar/institucional",
+                        "snippet": "Toyota Argentina fabrica y comercializa vehículos en Zárate.",
+                    },
+                    {
+                        "link": "https://www.mercadolibre.com.ar/toyota",
+                        "snippet": "Repuestos Toyota en Mercado Libre.",
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(google_search.httpx, "get", lambda *a, **k: RespuestaFalsa())
+
+    resultado = google_search.buscar_empresa("Toyota Argentina")
+    assert resultado["sitio_web"] == "https://www.toyota.com.ar"
+    assert "Zárate" in resultado["resumen"]
+    assert len(resultado["fuentes"]) == 3
