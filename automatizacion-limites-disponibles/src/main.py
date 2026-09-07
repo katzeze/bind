@@ -34,8 +34,9 @@ try:
     import truststore
 
     truststore.inject_into_ssl()
+    _TRUSTSTORE_ACTIVO = True
 except ImportError:
-    pass
+    _TRUSTSTORE_ACTIVO = False
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -70,6 +71,25 @@ def main() -> int:
     load_dotenv(BASE_DIR / ".env")
     with open(BASE_DIR / "config.yaml", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
+    # --- Certificados para el proxy corporativo ---
+    if _TRUSTSTORE_ACTIVO:
+        log.info("truststore activo: se usa el almacén de certificados de Windows.")
+    else:
+        log.warning(
+            "truststore NO está instalado: la conexión a Google va a fallar detrás "
+            "del proxy del banco. Ejecutar en el entorno virtual: pip install truststore"
+        )
+    # Alternativa: exportar el certificado del proxy a un .pem y apuntarlo
+    # en el .env con CA_BUNDLE=ruta\al\certificado.pem
+    ca_bundle = os.getenv("CA_BUNDLE")
+    if ca_bundle:
+        if Path(ca_bundle).exists():
+            os.environ["REQUESTS_CA_BUNDLE"] = ca_bundle
+            os.environ["SSL_CERT_FILE"] = ca_bundle
+            log.info("Usando CA_BUNDLE: %s", ca_bundle)
+        else:
+            log.warning("CA_BUNDLE apunta a un archivo inexistente: %s", ca_bundle)
 
     # ------------------------------------------------------------------
     # 1 y 2: descarga del Excel desde Qlik (salvo que se pase --archivo)
