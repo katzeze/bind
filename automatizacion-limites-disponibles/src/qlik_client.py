@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 # Textos de menú en español e inglés, por si el cliente Qlik está en otro idioma
 RE_DESCARGAR = re.compile(r"(descargar como|download as|export)", re.IGNORECASE)
-RE_DATOS = re.compile(r"^\s*(datos|data)\s*$", re.IGNORECASE)
+RE_DATOS = re.compile(r"(exportar datos|export data|^\s*datos\s*$|^\s*data\s*$)", re.IGNORECASE)
 RE_LINK_DESCARGA = re.compile(r"(clic aquí|click here|descargar el archivo|download the file)", re.IGNORECASE)
 
 # Selectores que indican que la hoja de Qlik ya está renderizada
@@ -257,29 +257,45 @@ class QlikClient:
 
     # ------------------------------------------------------------------
     def _abrir_menu_objeto(self, page: Page, objeto) -> None:
-        """Abre el menú contextual del objeto ('...' o clic derecho)."""
+        """Abre el menú contextual del objeto.
+
+        En este Qlik el botón '...' es un <a title="More" class="lui-icon--more">
+        dentro de div.qv-object-nav, HERMANO del objeto dentro de la celda
+        (.qv-gridcell). Ojo: [tid='nav-menu'] a nivel página es el menú
+        hamburguesa global, NO hay que tocarlo.
+        """
         objeto.hover()
         time.sleep(1.5)
         self._screenshot(page, "02_hover_objeto")
 
-        # Botón "..." que aparece al pasar el mouse (varias variantes de Qlik)
-        candidatos = (
-            "[tid='nav-menu']",
-            "button:has(.lui-icon--menu)",
-            "button[title*='men' i], button[aria-label*='men' i]",
-            "button[title*='more' i], button[aria-label*='more' i], button[aria-label*='options' i]",
-            ".qv-object-nav button",
+        selector_mas = (
+            ".qv-object-nav a.lui-icon--more, .qv-object-nav [title='More' i], "
+            ".qv-object-nav [q-title-translation='Tooltip.ContextMenu']"
         )
-        for selector in candidatos:
-            for ambito in (objeto, page):
+        celda = objeto.locator("xpath=ancestor::div[contains(@class,'qv-gridcell')][1]")
+        ambitos = ([celda] if celda.count() > 0 else []) + [page]
+
+        for ambito in ambitos:
+            botones = ambito.locator(selector_mas)
+            for i in range(botones.count()):
+                boton = botones.nth(i)
                 try:
-                    boton = ambito.locator(selector).first
-                    if boton.count() > 0 and boton.is_visible():
+                    if boton.is_visible():
                         boton.click(timeout=3_000)
-                        log.info("Menú abierto con el botón '...' (%s).", selector)
+                        log.info("Menú del objeto abierto con el botón '...'.")
                         return
                 except Exception:
                     continue
+
+        # El botón existe pero puede estar oculto hasta el hover: forzar clic
+        try:
+            boton = (celda if celda.count() > 0 else page).locator(selector_mas).first
+            if boton.count() > 0:
+                boton.click(timeout=3_000, force=True)
+                log.info("Menú del objeto abierto con el botón '...' (clic forzado).")
+                return
+        except Exception:
+            pass
 
         log.info("No se encontró el botón '...'; se abre el menú con clic derecho.")
         objeto.click(button="right")
@@ -306,7 +322,12 @@ class QlikClient:
         self._click_item_menu(page, RE_DESCARGAR)
         time.sleep(1)
         self._screenshot(page, "04_submenu_descargar")
-        self._click_item_menu(page, RE_DATOS)
+        # Según la versión de Qlik puede haber submenú ("Download as... > Data")
+        # o un único ítem ("Export data"); si no hay submenú, seguimos de largo.
+        try:
+            self._click_item_menu(page, RE_DATOS, timeout=8_000)
+        except Exception:
+            log.info("No apareció el submenú de datos; se asume exportación directa.")
 
         # Diálogo "Exportación completada" con el link de descarga
         log.info("Esperando que Qlik genere el archivo...")
