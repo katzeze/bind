@@ -12,9 +12,12 @@ qlik:
   # true = el navegador corre oculto; poner false para ver qué hace
   headless: true
 
-  # Si el login es con autenticación Windows (popup nativo de usuario y
-  # contraseña en lugar de un formulario web), poner true
-  windows_auth: false
+  # bi.somosbind.com.ar usa autenticación Windows (popup nativo
+  # "Seguridad de Windows", dominio INDUSTRIAL), no un formulario web.
+  # Con true, las credenciales QLIK_USER/QLIK_PASS del .env se envían
+  # a nivel HTTP (NTLM). Si con el usuario "pelado" da 401, probar
+  # QLIK_USER=INDUSTRIAL\tu_usuario
+  windows_auth: true
 
   # Tiempo máximo de espera para que cargue la hoja (segundos)
   timeout_seconds: 90

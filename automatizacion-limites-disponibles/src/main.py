@@ -83,7 +83,8 @@ def main() -> int:
             user=qlik_user,
             password=qlik_pass,
             download_dir=BASE_DIR / cfg.get("descargas", {}).get("carpeta", "descargas"),
-            debug_dir=(BASE_DIR / "debug") if args.debug else None,
+            debug_dir=BASE_DIR / "debug",
+            capturas_paso_a_paso=args.debug,
         )
         excel_path = cliente.descargar_tabla()
 

@@ -52,8 +52,9 @@ CUITs de la planilla **sin datos** en el Excel.
 * `qlik.object_title`: título del cuadro a exportar (por defecto `Historico`).
 * `qlik.headless`: poner `false` para **ver el navegador** mientras trabaja (útil la
   primera vez o para diagnosticar).
-* `qlik.windows_auth`: poner `true` si el sitio pide usuario/contraseña con el **popup
-  nativo de Windows** en lugar de un formulario web.
+* `qlik.windows_auth`: `true` (default). El sitio autentica con el **popup nativo de
+  Windows** (dominio `INDUSTRIAL`), así que las credenciales se envían por NTLM.
+  Si diera 401, probar en el `.env` el formato `QLIK_USER=INDUSTRIAL\tu_usuario`.
 * `excel.columnas`: alias de las columnas del Excel exportado (CUIT, Cupo, Vto Cupo,
   Deuda, % utilizado). Si Qlik las exporta con otro nombre, agregarlo acá.
 * `google_sheets`: ID de la planilla, nombre de la hoja y columnas destino
