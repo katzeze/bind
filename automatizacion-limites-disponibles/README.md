@@ -19,23 +19,20 @@ Automatiza el circuito completo:
 
 * **Python 3.10+** en la PC (con acceso de red a `bi.somosbind.com.ar`).
 * Usuario con permisos en el app de Qlik *Límites & Disponibles*.
-* Una **cuenta de servicio de Google** (`service_account.json`) con la API de Google
-  Sheets habilitada, **compartida como editora** en la planilla *Corresponsalía Local*
-  (compartir la planilla con el mail de la cuenta de servicio, igual que en el proyecto
-  `automatizacion-lineas-corresponsalia`).
+* Un **`client_secret.json`** de Google (credencial OAuth de escritorio). Sirve el
+  mismo que ya usás en `automatizacion-lineas-corresponsalia`: el script edita la
+  planilla **con tu propia cuenta**, así que **no hace falta compartirla con nadie**
+  (compatible con la restricción de no compartir fuera de la organización).
 
 ## Instalación
 
 1. Ejecutar `1-INSTALAR.bat` (crea el entorno virtual, instala dependencias y Chromium).
-2. Copiar `.env.example` a `.env` y completar:
-
-   ```
-   QLIK_USER=tu_usuario
-   QLIK_PASS=tu_contraseña
-   GOOGLE_SERVICE_ACCOUNT_FILE=service_account.json
-   ```
-
-3. Copiar `service_account.json` a la carpeta del proyecto.
+2. Copiar `.env.example` a `.env` y completar `QLIK_USER` y `QLIK_PASS`.
+3. Copiar `client_secret.json` a la carpeta del proyecto.
+4. **Primera corrida**: se abre el navegador para iniciar sesión con tu cuenta
+   corporativa y autorizar el acceso a Sheets. El token queda guardado en
+   `token_google.json` y no vuelve a pedir login (también podés copiar el
+   `token_google.json` del proyecto anterior si sigue vigente).
 
 ## Uso
 
@@ -72,8 +69,9 @@ Windows** que ejecute `3-ACTUALIZAR-PLANILLA.bat` en el horario deseado (quitar 
 
 ```
 ├── config.yaml              # URLs, columnas y planilla destino
-├── .env                     # Credenciales (NO subir a Git)
-├── service_account.json     # Clave de Google (NO subir a Git)
+├── .env                     # Credenciales de Qlik (NO subir a Git)
+├── client_secret.json       # Credencial OAuth de Google (NO subir a Git)
+├── token_google.json        # Token de sesión de Google (NO subir a Git)
 ├── descargas/               # Excel bajados de Qlik
 ├── logs/                    # Log de cada corrida
 ├── debug/                   # Capturas de pantalla (--debug)

@@ -39,6 +39,18 @@ google_sheets:
   spreadsheet_id: "19wRFoHvf1myQJVwuMM8I_3WZY_fxL0W-ARhdAZLnnKs"
   worksheet: "Hoja 1"
 
+  # Autenticación contra Google Sheets:
+  #  - "oauth": edita la planilla como tu propio usuario. La primera vez
+  #    abre el navegador para iniciar sesión y guarda el token en
+  #    token_google.json (no hay que compartir la planilla con nadie).
+  #  - "service_account": requiere compartir la planilla con la cuenta
+  #    de servicio (solo si la organización lo permite).
+  auth:
+    metodo: "oauth"
+    client_secret: "client_secret.json"
+    token: "token_google.json"
+    service_account: "service_account.json"
+
   # Fila donde están los encabezados (CUIT, Razón Social, ...)
   fila_encabezados: 1
 

@@ -2,18 +2,61 @@
 
 Busca cada CUIT de la planilla y completa Cupo, Vto cupo, Deuda y
 % utilizado con los valores extraídos del Excel de Qlik.
+
+Autenticación (config google_sheets.auth.metodo):
+- "oauth" (por defecto): el script edita la planilla como el propio
+  usuario. La primera vez abre el navegador para iniciar sesión con la
+  cuenta corporativa y guarda el token en token_google.json; después no
+  vuelve a pedir login. No hace falta compartir la planilla con nadie.
+- "service_account": requiere compartir la planilla con la cuenta de
+  servicio (solo si la organización lo permite).
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import gspread
 
 from excel_parser import LineaCupo, normalizar_cuit
 
 log = logging.getLogger(__name__)
+
+SCOPES_OAUTH = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+]
+
+
+def conectar(auth_cfg: dict, base_dir: Path) -> gspread.Client:
+    """Devuelve un cliente de gspread según el método de autenticación."""
+
+    def _ruta(nombre: str) -> str:
+        p = Path(auth_cfg.get(nombre, ""))
+        return str(p if p.is_absolute() else base_dir / p)
+
+    metodo = auth_cfg.get("metodo", "oauth")
+    if metodo == "service_account":
+        archivo = _ruta("service_account")
+        log.info("Autenticando con cuenta de servicio: %s", archivo)
+        return gspread.service_account(filename=archivo)
+
+    client_secret = _ruta("client_secret")
+    token = _ruta("token")
+    if not Path(client_secret).exists():
+        raise FileNotFoundError(
+            f"No se encontró {client_secret}. Copiá el client_secret.json "
+            "(el mismo del proyecto de líneas de corresponsalía sirve) a la "
+            "carpeta del proyecto."
+        )
+    log.info("Autenticando con OAuth de usuario (token: %s)", token)
+    return gspread.oauth(
+        scopes=SCOPES_OAUTH,
+        credentials_filename=client_secret,
+        authorized_user_filename=token,
+    )
 
 
 @dataclass
@@ -46,11 +89,11 @@ def _formatear_valor(v):
 
 def actualizar_planilla(
     cfg: dict,
-    service_account_file: str,
+    base_dir: Path,
     lineas: dict[str, LineaCupo],
     dry_run: bool = False,
 ) -> ResultadoActualizacion:
-    gc = gspread.service_account(filename=service_account_file)
+    gc = conectar(cfg.get("auth", {}), base_dir)
     sh = gc.open_by_key(cfg["spreadsheet_id"])
     ws = sh.worksheet(cfg.get("worksheet", "Hoja 1"))
 

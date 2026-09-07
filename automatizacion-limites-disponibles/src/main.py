@@ -98,15 +98,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # 4: actualización de la planilla "Corresponsalía Local"
     # ------------------------------------------------------------------
-    service_account = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(BASE_DIR / "service_account.json"))
-    if not Path(service_account).is_absolute():
-        service_account = str(BASE_DIR / service_account)
-    if not Path(service_account).exists():
-        log.error("No se encontró la credencial de Google: %s", service_account)
-        return 1
-
     resultado = actualizar_planilla(
-        cfg["google_sheets"], service_account, lineas, dry_run=args.dry_run
+        cfg["google_sheets"], BASE_DIR, lineas, dry_run=args.dry_run
     )
 
     log.info("================ RESUMEN ================")

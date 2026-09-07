@@ -15,6 +15,6 @@ playwright install chromium
 echo.
 echo Listo. Ahora:
 echo   1. Copia .env.example a .env y completa las credenciales.
-echo   2. Coloca service_account.json en esta carpeta.
+echo   2. Coloca client_secret.json en esta carpeta.
 echo   3. Ejecuta 2-PROBAR.bat para una corrida de prueba.
 pause
