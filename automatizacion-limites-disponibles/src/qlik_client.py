@@ -30,12 +30,14 @@ from playwright.sync_api import (
 log = logging.getLogger(__name__)
 
 # Textos de menú en español e inglés, por si el cliente Qlik está en otro idioma
-RE_DESCARGAR = re.compile(r"(descargar como|download as|exportar)", re.IGNORECASE)
+RE_DESCARGAR = re.compile(r"(descargar como|download as|export)", re.IGNORECASE)
 RE_DATOS = re.compile(r"^\s*(datos|data)\s*$", re.IGNORECASE)
 RE_LINK_DESCARGA = re.compile(r"(clic aquí|click here|descargar el archivo|download the file)", re.IGNORECASE)
 
 # Selectores que indican que la hoja de Qlik ya está renderizada
 SELECTOR_HOJA = ".qv-object, .qvt-sheet, [tid='qv-object'], .njs-cell, .qv-panel-sheet, .sheet-title-container"
+# Objetos de tipo tabla (evita filtros, textos y KPIs)
+SELECTOR_TABLA = ".qv-object-table, .qv-object-pivot-table, .qv-object-sn-table, .qv-object-sn-pivot-table"
 
 
 class QlikClient:
@@ -84,7 +86,7 @@ class QlikClient:
                 estado = self._esperar_login_u_hoja(page)
                 if estado == "login":
                     self._completar_login(page)
-                    self._esperar_hoja(page)
+                self._esperar_hoja(page)
 
                 log.info("Hoja cargada. Título: %r | URL: %s", page.title(), page.url)
                 self._screenshot(page, "01_hoja_cargada")
@@ -178,68 +180,139 @@ class QlikClient:
 
     # ------------------------------------------------------------------
     def _esperar_hoja(self, page: Page) -> None:
-        """Espera a que los objetos de la hoja Qlik estén renderizados."""
+        """Espera a que la hoja Qlik esté realmente renderizada."""
         log.info("Esperando que cargue la hoja...")
         page.wait_for_selector(SELECTOR_HOJA, timeout=self.timeout_ms)
+
+        # Esperar a que desaparezca el splash "Opening the sheet"
+        for texto in ("Opening the sheet", "Abriendo la hoja"):
+            try:
+                splash = page.get_by_text(texto, exact=False).first
+                if splash.count() > 0:
+                    splash.wait_for(state="hidden", timeout=self.timeout_ms)
+            except Exception:
+                pass
+
+        # Esperar a que aparezca al menos una tabla (el objeto que exportamos)
         try:
-            page.wait_for_load_state("networkidle", timeout=30_000)
+            page.wait_for_selector(SELECTOR_TABLA, timeout=self.timeout_ms)
+        except PlaywrightTimeout:
+            log.warning("No apareció ningún objeto de tipo tabla; se seguirá con los objetos genéricos.")
+
+        try:
+            page.wait_for_load_state("networkidle", timeout=20_000)
         except PlaywrightTimeout:
             pass  # Qlik mantiene websockets abiertos; no siempre llega a networkidle
         # Margen extra para que la tabla termine de poblarse
         time.sleep(3)
 
     # ------------------------------------------------------------------
+    def _mas_grande(self, page: Page, selector: str):
+        """Devuelve el elemento visible de mayor superficie para el selector."""
+        loc = page.locator(selector)
+        mejor, mejor_area = None, 0.0
+        for i in range(loc.count()):
+            el = loc.nth(i)
+            try:
+                if not el.is_visible():
+                    continue
+                caja = el.bounding_box()
+                if not caja:
+                    continue
+                area = caja["width"] * caja["height"]
+                if area > mejor_area:
+                    mejor, mejor_area = el, area
+            except Exception:
+                continue
+        return mejor
+
+    # ------------------------------------------------------------------
     def _buscar_objeto(self, page: Page):
-        """Ubica el objeto de la hoja por su título (p. ej. 'Historico')."""
+        """Ubica la tabla a exportar.
+
+        Nota: 'Historico' suele ser el título de la HOJA, no del objeto,
+        así que la estrategia principal es tomar el objeto de tipo tabla
+        más grande de la pantalla (la grilla con los CUITs).
+        """
+        objeto = self._mas_grande(page, SELECTOR_TABLA)
+        if objeto is not None:
+            clase = objeto.get_attribute("class") or ""
+            log.info("Tabla encontrada por tipo de objeto (class=%r).", clase[:120])
+            objeto.scroll_into_view_if_needed()
+            return objeto
+
         titulo = self.cfg.get("object_title", "")
         if titulo:
-            for selector_objeto in (".qv-object", ".njs-cell", "[tid='qv-object']"):
-                objeto = page.locator(selector_objeto, has=page.get_by_text(titulo, exact=False)).first
-                if objeto.count() > 0:
-                    log.info("Objeto '%s' encontrado (%s).", titulo, selector_objeto)
-                    objeto.scroll_into_view_if_needed()
-                    return objeto
-            log.warning("No se encontró un objeto con título '%s'; se usa la primera tabla.", titulo)
+            candidato = page.locator(".qv-object", has=page.get_by_text(titulo, exact=False)).first
+            if candidato.count() > 0 and candidato.is_visible():
+                log.info("Objeto encontrado por título '%s'.", titulo)
+                candidato.scroll_into_view_if_needed()
+                return candidato
 
-        objeto = page.locator(".qv-object-table, .qv-object, .njs-cell").first
-        objeto.wait_for(state="visible", timeout=self.timeout_ms)
+        objeto = self._mas_grande(page, ".qv-object, .njs-cell")
+        if objeto is None:
+            raise RuntimeError("No se encontró ningún objeto exportable en la hoja.")
+        log.warning("No hay objetos de tipo tabla; se usa el objeto más grande de la hoja.")
         return objeto
+
+    # ------------------------------------------------------------------
+    def _abrir_menu_objeto(self, page: Page, objeto) -> None:
+        """Abre el menú contextual del objeto ('...' o clic derecho)."""
+        objeto.hover()
+        time.sleep(1.5)
+        self._screenshot(page, "02_hover_objeto")
+
+        # Botón "..." que aparece al pasar el mouse (varias variantes de Qlik)
+        candidatos = (
+            "[tid='nav-menu']",
+            "button:has(.lui-icon--menu)",
+            "button[title*='men' i], button[aria-label*='men' i]",
+            "button[title*='more' i], button[aria-label*='more' i], button[aria-label*='options' i]",
+            ".qv-object-nav button",
+        )
+        for selector in candidatos:
+            for ambito in (objeto, page):
+                try:
+                    boton = ambito.locator(selector).first
+                    if boton.count() > 0 and boton.is_visible():
+                        boton.click(timeout=3_000)
+                        log.info("Menú abierto con el botón '...' (%s).", selector)
+                        return
+                except Exception:
+                    continue
+
+        log.info("No se encontró el botón '...'; se abre el menú con clic derecho.")
+        objeto.click(button="right")
+
+    # ------------------------------------------------------------------
+    def _click_item_menu(self, page: Page, patron: re.Pattern, timeout: int = 15_000) -> None:
+        """Clickea una entrada de menú por rol o por texto."""
+        try:
+            item = page.get_by_role("menuitem", name=patron).first
+            item.click(timeout=timeout // 2)
+            return
+        except Exception:
+            pass
+        page.get_by_text(patron).first.click(timeout=timeout)
 
     # ------------------------------------------------------------------
     def _exportar_datos(self, page: Page, objeto) -> Path:
         """Abre el menú del objeto y ejecuta 'Descargar como... > Datos'."""
         log.info("Abriendo menú del objeto...")
-        objeto.hover()
+        self._abrir_menu_objeto(page, objeto)
         time.sleep(1)
+        self._screenshot(page, "03_menu_abierto")
 
-        # Intento 1: botón "..." que aparece al pasar el mouse
-        menu_abierto = False
-        boton_menu = objeto.locator(
-            "[tid='nav-menu'], button[title*='men' i], "
-            "button[aria-label*='men' i], .qv-object-nav button"
-        ).first
-        try:
-            boton_menu.click(timeout=5_000)
-            menu_abierto = True
-        except PlaywrightTimeout:
-            log.info("No se pudo clickear el botón '...'; se intenta con clic derecho.")
-
-        # Intento 2: clic derecho sobre el objeto (menú contextual de Qlik)
-        if not menu_abierto:
-            objeto.click(button="right")
-
-        self._screenshot(page, "02_menu_abierto")
-
-        page.get_by_text(RE_DESCARGAR).first.click(timeout=15_000)
+        self._click_item_menu(page, RE_DESCARGAR)
         time.sleep(1)
-        self._screenshot(page, "03_submenu_descargar")
-        page.get_by_text(RE_DATOS).first.click(timeout=15_000)
+        self._screenshot(page, "04_submenu_descargar")
+        self._click_item_menu(page, RE_DATOS)
 
         # Diálogo "Exportación completada" con el link de descarga
         log.info("Esperando que Qlik genere el archivo...")
         link = page.get_by_text(RE_LINK_DESCARGA).first
         link.wait_for(state="visible", timeout=self.timeout_ms)
-        self._screenshot(page, "04_dialogo_exportacion")
+        self._screenshot(page, "05_dialogo_exportacion")
 
         with page.expect_download(timeout=self.timeout_ms) as download_info:
             link.click()
