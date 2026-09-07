@@ -1,0 +1,10 @@
+.env
+service_account.json
+client_secret.json
+token_google.json
+.venv/
+__pycache__/
+logs/
+debug/
+descargas/
+*.xlsx

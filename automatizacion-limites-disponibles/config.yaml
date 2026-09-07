@@ -1,0 +1,55 @@
+# =============================================================
+# Configuración - Automatización Límites & Disponibles (Qlik)
+# =============================================================
+
+qlik:
+  # URL de la hoja "Límites & Disponibles" en Qlik Sense
+  sheet_url: "https://bi.somosbind.com.ar/sense/app/24af9303-7368-49d8-bd2a-36b8b013ceee/sheet/029a3744-f706-42f5-9d1a-b6f33a6cb9e9/state/analysis"
+
+  # Título del objeto (tabla) a exportar, tal como figura en la hoja
+  object_title: "Historico"
+
+  # true = el navegador corre oculto; poner false para ver qué hace
+  headless: true
+
+  # Si el login es con autenticación Windows (popup nativo de usuario y
+  # contraseña en lugar de un formulario web), poner true
+  windows_auth: false
+
+  # Tiempo máximo de espera para que cargue la hoja (segundos)
+  timeout_seconds: 90
+
+# -------------------------------------------------------------
+# Columnas esperadas en el Excel exportado desde Qlik.
+# Se buscan sin distinguir mayúsculas ni acentos; se puede poner
+# más de un alias por si el nombre exacto varía.
+# -------------------------------------------------------------
+excel:
+  columnas:
+    cuit: ["CUIT"]
+    cupo: ["CUPO"]
+    vto_cupo: ["VTO CUPO", "VTO. CUPO", "VENCIMIENTO CUPO", "VTO"]
+    deuda: ["DEUDA"]
+    utilizado: ["% UTILIZADO", "%UTILIZADO", "PORCENTAJE UTILIZADO", "UTILIZADO"]
+
+# -------------------------------------------------------------
+# Planilla destino en Google Drive: "Corresponsalía Local"
+# -------------------------------------------------------------
+google_sheets:
+  spreadsheet_id: "19wRFoHvf1myQJVwuMM8I_3WZY_fxL0W-ARhdAZLnnKs"
+  worksheet: "Hoja 1"
+
+  # Fila donde están los encabezados (CUIT, Razón Social, ...)
+  fila_encabezados: 1
+
+  # Columnas de la planilla destino
+  columnas:
+    cuit: "A"
+    cupo: "D"
+    vto_cupo: "E"
+    deuda: "F"
+    utilizado: "G"
+
+descargas:
+  # Carpeta local donde se guardan los Excel descargados
+  carpeta: "descargas"
