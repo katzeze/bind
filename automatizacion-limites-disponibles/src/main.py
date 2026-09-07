@@ -26,6 +26,17 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+# El proxy corporativo intercepta HTTPS con su propio certificado.
+# truststore hace que Python confíe en el almacén de certificados de
+# Windows (igual que Chrome); sin esto, la conexión a Google falla con
+# "certificate verify failed: self-signed certificate in certificate chain".
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
