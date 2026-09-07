@@ -77,10 +77,16 @@ def _col_a_indice(letra: str) -> int:
 def _formatear_valor(v):
     """Convierte el valor del Excel a algo que Sheets interprete bien.
 
-    Los valores vacíos se cargan como 0 para no dejar celdas en blanco.
+    Qlik exporta los valores inexistentes como "-" (o celdas vacías);
+    todos esos casos se cargan como 0 numérico en la planilla.
     """
     if v is None:
         return 0
+    if isinstance(v, str):
+        texto = v.strip()
+        if texto in ("", "-", "0"):
+            return 0
+        return v
     try:
         import math
         if isinstance(v, float) and math.isnan(v):
