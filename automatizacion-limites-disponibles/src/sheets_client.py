@@ -75,13 +75,16 @@ def _col_a_indice(letra: str) -> int:
 
 
 def _formatear_valor(v):
-    """Convierte el valor del Excel a algo que Sheets interprete bien."""
+    """Convierte el valor del Excel a algo que Sheets interprete bien.
+
+    Los valores vacíos se cargan como 0 para no dejar celdas en blanco.
+    """
     if v is None:
-        return ""
+        return 0
     try:
         import math
         if isinstance(v, float) and math.isnan(v):
-            return ""
+            return 0
     except Exception:
         pass
     return v
@@ -117,10 +120,14 @@ def actualizar_planilla(
 
         linea = lineas.get(cuit)
         if linea is None:
+            # CUIT sin datos en el Excel de Qlik: se carga 0 en todo
+            for col in (cols["cupo"], cols["vto_cupo"], cols["deuda"], cols["utilizado"]):
+                updates.append({"range": f"{col}{idx}", "values": [[0]]})
             sin_datos.append(cuit)
+            log.info("CUIT %s sin datos en el Excel: se carga 0.", cuit)
             continue
 
-        vto_texto = linea.vto_cupo.strftime("%d/%m/%Y") if linea.vto_cupo else ""
+        vto_texto = linea.vto_cupo.strftime("%d/%m/%Y") if linea.vto_cupo else 0
         updates.append({
             "range": f"{cols['cupo']}{idx}",
             "values": [[_formatear_valor(linea.cupo)]],

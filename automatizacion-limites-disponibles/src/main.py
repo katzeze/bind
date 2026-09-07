@@ -143,7 +143,7 @@ def main() -> int:
         )
     if resultado.sin_datos:
         log.warning(
-            "CUITs de la planilla SIN datos en el Excel de Qlik: %s",
+            "CUITs de la planilla sin datos en el Excel de Qlik (se cargó 0): %s",
             ", ".join(resultado.sin_datos),
         )
     log.info("=========================================")
