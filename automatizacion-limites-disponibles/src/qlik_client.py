@@ -30,6 +30,10 @@ from playwright.sync_api import (
 log = logging.getLogger(__name__)
 
 # Textos de menú en español e inglés, por si el cliente Qlik está en otro idioma
+RE_MENU_ABIERTO = re.compile(
+    r"(export|download|descargar|exportar|snapshot|full screen|pantalla completa|exploration)",
+    re.IGNORECASE,
+)
 RE_DESCARGAR = re.compile(r"(descargar como|download as|export)", re.IGNORECASE)
 RE_DATOS = re.compile(r"(exportar datos|export data|^\s*datos\s*$|^\s*data\s*$)", re.IGNORECASE)
 RE_LINK_DESCARGA = re.compile(r"(clic aquí|click here|descargar el archivo|download the file)", re.IGNORECASE)
@@ -273,32 +277,50 @@ class QlikClient:
             ".qv-object-nav [q-title-translation='Tooltip.ContextMenu']"
         )
         celda = objeto.locator("xpath=ancestor::div[contains(@class,'qv-gridcell')][1]")
-        ambitos = ([celda] if celda.count() > 0 else []) + [page]
+        ambito = celda if celda.count() > 0 else page
 
-        for ambito in ambitos:
+        for intento in range(1, 4):
+            boton = None
             botones = ambito.locator(selector_mas)
             for i in range(botones.count()):
-                boton = botones.nth(i)
-                try:
-                    if boton.is_visible():
-                        boton.click(timeout=3_000)
-                        log.info("Menú del objeto abierto con el botón '...'.")
-                        return
-                except Exception:
-                    continue
+                if botones.nth(i).is_visible():
+                    boton = botones.nth(i)
+                    break
 
-        # El botón existe pero puede estar oculto hasta el hover: forzar clic
-        try:
-            boton = (celda if celda.count() > 0 else page).locator(selector_mas).first
-            if boton.count() > 0:
-                boton.click(timeout=3_000, force=True)
-                log.info("Menú del objeto abierto con el botón '...' (clic forzado).")
+            try:
+                if boton is not None:
+                    boton.click(timeout=3_000)
+                elif botones.count() > 0:
+                    botones.first.click(timeout=3_000, force=True)
+                else:
+                    objeto.click(button="right")
+            except Exception:
+                log.warning("Intento %d: no se pudo clickear el botón '...'.", intento)
+
+            if self._menu_visible(page):
+                log.info("Menú del objeto abierto (intento %d).", intento)
                 return
-        except Exception:
-            pass
+            log.warning("Intento %d: el menú no quedó abierto; se reintenta.", intento)
+            objeto.hover()
+            time.sleep(1)
 
-        log.info("No se encontró el botón '...'; se abre el menú con clic derecho.")
+        # Último recurso: clic derecho sobre el objeto
         objeto.click(button="right")
+        if self._menu_visible(page):
+            log.info("Menú del objeto abierto con clic derecho.")
+            return
+        raise RuntimeError("No se pudo abrir el menú contextual del objeto (ver debug/).")
+
+    # ------------------------------------------------------------------
+    def _menu_visible(self, page: Page) -> bool:
+        """True si el menú contextual del objeto quedó desplegado."""
+        try:
+            page.get_by_text(RE_MENU_ABIERTO).first.wait_for(state="visible", timeout=4_000)
+            return True
+        except PlaywrightTimeout:
+            return False
+        except Exception:
+            return False
 
     # ------------------------------------------------------------------
     def _click_item_menu(self, page: Page, patron: re.Pattern, timeout: int = 15_000) -> None:
@@ -345,12 +367,16 @@ class QlikClient:
 
     # ------------------------------------------------------------------
     def _screenshot(self, page: Page, nombre: str) -> None:
-        """Captura por paso (solo con --debug)."""
+        """Captura por paso (solo con --debug).
+
+        IMPORTANTE: sin full_page — la captura de página completa
+        redimensiona el viewport y eso cierra los menús de Qlik.
+        """
         if not self.capturas_paso_a_paso:
             return
         try:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(self.debug_dir / f"{nombre}.png"), full_page=True)
+            page.screenshot(path=str(self.debug_dir / f"{nombre}.png"))
         except Exception:  # el debug nunca debe romper el flujo principal
             log.exception("No se pudo guardar la captura %s", nombre)
 
@@ -360,7 +386,7 @@ class QlikClient:
         try:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
             marca = datetime.now().strftime("%Y%m%d_%H%M%S")
-            page.screenshot(path=str(self.debug_dir / f"error_{marca}.png"), full_page=True)
+            page.screenshot(path=str(self.debug_dir / f"error_{marca}.png"))
             (self.debug_dir / f"error_{marca}.html").write_text(page.content(), encoding="utf-8")
             (self.debug_dir / f"error_{marca}.txt").write_text(
                 f"URL: {page.url}\nTitulo: {page.title()}\n", encoding="utf-8"
