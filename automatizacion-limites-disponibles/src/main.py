@@ -6,6 +6,7 @@ Pasos:
 3. Por cada CUIT elige la línea válida: la aún no vencida o, si todas
    vencieron, la última que venció.
 4. Completa Cupo, Vto cupo, Deuda y % utilizado en la planilla de Drive.
+5. Envía una notificación por correo electrónico con el resultado.
 
 Uso:
     python src/main.py                # ejecución normal
@@ -19,8 +20,11 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import smtplib
 import sys
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import yaml
@@ -58,6 +62,50 @@ def configurar_logging() -> None:
     )
 
 
+def enviar_correo_notificacion(asunto: str, mensaje: str, cfg: dict, log: logging.Logger) -> None:
+    """Envía un correo electrónico de notificación vía SMTP.
+
+    Servidor, remitente y destinatario salen de config.yaml (email:);
+    la contraseña de aplicación sale del .env (SMTP_PASSWORD) para no
+    dejar secretos en archivos versionados.
+    """
+    cfg_email = cfg.get("email", {})
+    if not cfg_email.get("enabled", False):
+        log.info("Envío de notificaciones por correo desactivado en config.yaml.")
+        return
+
+    remitente = cfg_email.get("sender_email")
+    destinatario = cfg_email.get("recipient_email")
+    smtp_server = cfg_email.get("smtp_server", "smtp.gmail.com")
+    smtp_port = cfg_email.get("smtp_port", 587)
+    # La contraseña va en el .env; se acepta el viejo campo de config
+    # solo por compatibilidad (no recomendado).
+    password = os.getenv("SMTP_PASSWORD") or cfg_email.get("sender_password")
+
+    if not remitente or not password or not destinatario:
+        log.warning(
+            "Faltan datos de correo (sender/recipient en config.yaml, "
+            "SMTP_PASSWORD en .env). No se enviará notificación."
+        )
+        return
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = remitente
+        msg["To"] = destinatario
+        msg["Subject"] = asunto
+        msg.attach(MIMEText(mensaje, "plain", "utf-8"))
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(remitente, password)
+            server.send_message(msg)
+
+        log.info("📧 Correo de notificación enviado exitosamente a %s", destinatario)
+    except Exception as e:
+        log.error("❌ Error al enviar la notificación por correo: %s", e)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Automatización Límites & Disponibles")
     parser.add_argument("--dry-run", action="store_true", help="No escribe en la planilla")
@@ -69,8 +117,12 @@ def main() -> int:
     log = logging.getLogger("main")
 
     load_dotenv(BASE_DIR / ".env")
-    with open(BASE_DIR / "config.yaml", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    try:
+        with open(BASE_DIR / "config.yaml", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+    except Exception as e:
+        log.critical("Error al cargar config.yaml: %s", e)
+        return 1
 
     # --- Certificados para el proxy corporativo ---
     if _TRUSTSTORE_ACTIVO:
@@ -80,8 +132,7 @@ def main() -> int:
             "truststore NO está instalado: la conexión a Google va a fallar detrás "
             "del proxy del banco. Ejecutar en el entorno virtual: pip install truststore"
         )
-    # Alternativa: exportar el certificado del proxy a un .pem y apuntarlo
-    # en el .env con CA_BUNDLE=ruta\al\certificado.pem
+
     ca_bundle = os.getenv("CA_BUNDLE")
     if ca_bundle:
         if Path(ca_bundle).exists():
@@ -91,63 +142,93 @@ def main() -> int:
         else:
             log.warning("CA_BUNDLE apunta a un archivo inexistente: %s", ca_bundle)
 
-    # ------------------------------------------------------------------
-    # 1 y 2: descarga del Excel desde Qlik (salvo que se pase --archivo)
-    # ------------------------------------------------------------------
-    if args.archivo:
-        excel_path = Path(args.archivo)
-        if not excel_path.exists():
-            log.error("El archivo %s no existe.", excel_path)
-            return 1
-        log.info("Usando Excel existente: %s", excel_path)
-    else:
-        qlik_user = os.getenv("QLIK_USER")
-        qlik_pass = os.getenv("QLIK_PASS")
-        if not qlik_user or not qlik_pass:
-            log.error("Faltan QLIK_USER / QLIK_PASS en el archivo .env")
+    try:
+        # ------------------------------------------------------------------
+        # 1 y 2: descarga del Excel desde Qlik (salvo que se pase --archivo)
+        # ------------------------------------------------------------------
+        if args.archivo:
+            excel_path = Path(args.archivo)
+            if not excel_path.exists():
+                error_msg = f"El archivo especificado {excel_path} no existe."
+                log.error(error_msg)
+                enviar_correo_notificacion("🔴 ERROR: Automatización Límites & Disponibles", error_msg, cfg, log)
+                return 1
+            log.info("Usando Excel existente: %s", excel_path)
+        else:
+            qlik_user = os.getenv("QLIK_USER")
+            qlik_pass = os.getenv("QLIK_PASS")
+            if not qlik_user or not qlik_pass:
+                error_msg = "Faltan las credenciales QLIK_USER / QLIK_PASS en el archivo .env"
+                log.error(error_msg)
+                enviar_correo_notificacion("🔴 ERROR: Automatización Límites & Disponibles", error_msg, cfg, log)
+                return 1
+
+            from qlik_client import QlikClient  # import tardío: requiere playwright
+
+            cliente = QlikClient(
+                cfg["qlik"],
+                user=qlik_user,
+                password=qlik_pass,
+                download_dir=BASE_DIR / cfg.get("descargas", {}).get("carpeta", "descargas"),
+                debug_dir=BASE_DIR / "debug",
+                capturas_paso_a_paso=args.debug,
+            )
+            excel_path = cliente.descargar_tabla()
+
+        # ------------------------------------------------------------------
+        # 3: parseo y selección de la línea válida por CUIT
+        # ------------------------------------------------------------------
+        lineas = parsear_excel(excel_path, cfg["excel"]["columnas"])
+        if not lineas:
+            error_msg = "El Excel descargado no tiene filas con CUIT válidos. Se aborta la actualización."
+            log.error(error_msg)
+            enviar_correo_notificacion("🔴 ERROR: Automatización Límites & Disponibles", error_msg, cfg, log)
             return 1
 
-        from qlik_client import QlikClient  # import tardío: requiere playwright
-
-        cliente = QlikClient(
-            cfg["qlik"],
-            user=qlik_user,
-            password=qlik_pass,
-            download_dir=BASE_DIR / cfg.get("descargas", {}).get("carpeta", "descargas"),
-            debug_dir=BASE_DIR / "debug",
-            capturas_paso_a_paso=args.debug,
+        # ------------------------------------------------------------------
+        # 4: actualización de la planilla "Corresponsalía Local"
+        # ------------------------------------------------------------------
+        resultado = actualizar_planilla(
+            cfg["google_sheets"], BASE_DIR, lineas, dry_run=args.dry_run
         )
-        excel_path = cliente.descargar_tabla()
 
-    # ------------------------------------------------------------------
-    # 3: parseo y selección de la línea válida por CUIT
-    # ------------------------------------------------------------------
-    lineas = parsear_excel(excel_path, cfg["excel"]["columnas"])
-    if not lineas:
-        log.error("El Excel no tiene filas con CUIT: se aborta sin tocar la planilla.")
+        log.info("================ RESUMEN ================")
+        log.info("Filas actualizadas: %d", len(resultado.actualizados))
+        if resultado.con_cupo_vencido:
+            log.warning(
+                "CUITs con cupo VENCIDO (se cargó la última línea vencida): %s",
+                ", ".join(resultado.con_cupo_vencido),
+            )
+        if resultado.sin_datos:
+            log.warning(
+                "CUITs de la planilla sin datos en el Excel de Qlik (se cargó 0): %s",
+                ", ".join(resultado.sin_datos),
+            )
+        log.info("=========================================")
+
+        # ------------------------------------------------------------------
+        # 5: Notificación por correo electrónico de éxito
+        # ------------------------------------------------------------------
+        cuerpo_exito = (
+            "El proceso de actualización finalizó correctamente.\n\n"
+            f"• Filas actualizadas: {len(resultado.actualizados)}\n"
+            f"• CUITs con cupo vencido: {len(resultado.con_cupo_vencido)}\n"
+            f"• CUITs sin datos en Qlik: {len(resultado.sin_datos)}\n"
+            f"• Modo de ejecución: {'DRY-RUN (Sin escritura)' if args.dry_run else 'NORMAL'}\n"
+            f"• Archivo procesado: {excel_path.name}"
+        )
+        enviar_correo_notificacion("🟢 ÉXITO: Automatización Límites & Disponibles", cuerpo_exito, cfg, log)
+        return 0
+
+    except Exception as e:
+        log.exception("Ocurrió un error irrecuperable durante la ejecución:")
+        cuerpo_error = (
+            "Se produjo un fallo inesperado durante la automatización.\n\n"
+            f"Detalle del error:\n{str(e)}\n\n"
+            "Revisa los archivos en la carpeta /logs para obtener más información."
+        )
+        enviar_correo_notificacion("🔴 ERROR: Automatización Límites & Disponibles", cuerpo_error, cfg, log)
         return 1
-
-    # ------------------------------------------------------------------
-    # 4: actualización de la planilla "Corresponsalía Local"
-    # ------------------------------------------------------------------
-    resultado = actualizar_planilla(
-        cfg["google_sheets"], BASE_DIR, lineas, dry_run=args.dry_run
-    )
-
-    log.info("================ RESUMEN ================")
-    log.info("Filas actualizadas: %d", len(resultado.actualizados))
-    if resultado.con_cupo_vencido:
-        log.warning(
-            "CUITs con cupo VENCIDO (se cargó la última línea vencida): %s",
-            ", ".join(resultado.con_cupo_vencido),
-        )
-    if resultado.sin_datos:
-        log.warning(
-            "CUITs de la planilla sin datos en el Excel de Qlik (se cargó 0): %s",
-            ", ".join(resultado.sin_datos),
-        )
-    log.info("=========================================")
-    return 0
 
 
 if __name__ == "__main__":

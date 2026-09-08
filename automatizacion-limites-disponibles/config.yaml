@@ -72,3 +72,15 @@ google_sheets:
 descargas:
   # Carpeta local donde se guardan los Excel descargados
   carpeta: "descargas"
+
+# -------------------------------------------------------------
+# Notificaciones por correo electrónico
+# La contraseña NO va acá: ponerla en el .env como SMTP_PASSWORD
+# (contraseña de aplicación de Gmail de 16 caracteres).
+# -------------------------------------------------------------
+email:
+  enabled: true
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  sender_email: "ekatz@bancoindustrial.com.ar"
+  recipient_email: "ekatz@bind.com.ar"
