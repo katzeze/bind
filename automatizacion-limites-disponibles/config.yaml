@@ -22,6 +22,10 @@ qlik:
   # Tiempo máximo de espera para que cargue la hoja (segundos)
   timeout_seconds: 90
 
+  # Tiempo máximo para que el servidor genere el Excel de exportación
+  # (con el servidor cargado puede tardar varios minutos)
+  export_timeout_seconds: 300
+
 # -------------------------------------------------------------
 # Columnas esperadas en el Excel exportado desde Qlik.
 # Se buscan sin distinguir mayúsculas ni acentos; se puede poner

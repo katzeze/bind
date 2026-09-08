@@ -54,6 +54,9 @@ class QlikClient:
         self.debug_dir = Path(debug_dir)
         self.capturas_paso_a_paso = capturas_paso_a_paso
         self.timeout_ms = int(cfg.get("timeout_seconds", 90)) * 1000
+        # La generación del Excel en el servidor puede tardar varios minutos
+        # cuando hay mucha carga (la tabla tiene ~140 mil filas)
+        self.export_timeout_ms = int(cfg.get("export_timeout_seconds", 300)) * 1000
 
     # ------------------------------------------------------------------
     def descargar_tabla(self) -> Path:
@@ -351,13 +354,41 @@ class QlikClient:
         except Exception:
             log.info("No apareció el submenú de datos; se asume exportación directa.")
 
-        # Diálogo "Exportación completada" con el link de descarga
-        log.info("Esperando que Qlik genere el archivo...")
+        # Diálogo "Exporting data..." -> esperar el link de descarga.
+        # La generación puede tardar varios minutos con el servidor cargado.
+        log.info(
+            "Esperando que Qlik genere el archivo (hasta %d segundos)...",
+            self.export_timeout_ms // 1000,
+        )
         link = page.get_by_text(RE_LINK_DESCARGA).first
-        link.wait_for(state="visible", timeout=self.timeout_ms)
+        re_fallo = re.compile(r"(export failed|error al exportar|exportación fallida|failed)", re.IGNORECASE)
+        fin = time.monotonic() + self.export_timeout_ms / 1000
+        while True:
+            try:
+                if link.is_visible():
+                    break
+            except Exception:
+                pass
+            try:
+                if page.get_by_text(re_fallo).first.is_visible():
+                    raise RuntimeError("Qlik informó un error al generar la exportación.")
+            except PlaywrightTimeout:
+                pass
+            except RuntimeError:
+                raise
+            except Exception:
+                pass
+            if time.monotonic() >= fin:
+                raise RuntimeError(
+                    "Qlik no terminó de generar el archivo en "
+                    f"{self.export_timeout_ms // 1000}s (quedó en 'Exporting data...'). "
+                    "Puede ser carga del servidor: subí qlik.export_timeout_seconds "
+                    "en config.yaml o reintentá más tarde."
+                )
+            time.sleep(2)
         self._screenshot(page, "05_dialogo_exportacion")
 
-        with page.expect_download(timeout=self.timeout_ms) as download_info:
+        with page.expect_download(timeout=self.export_timeout_ms) as download_info:
             link.click()
         download = download_info.value
 
