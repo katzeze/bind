@@ -29,6 +29,10 @@ from playwright.sync_api import (
 
 log = logging.getLogger(__name__)
 
+
+class _ExportacionColgada(Exception):
+    """La generación del Excel quedó colgada o falló en el servidor."""
+
 # Textos de menú en español e inglés, por si el cliente Qlik está en otro idioma
 RE_MENU_ABIERTO = re.compile(
     r"(export|download|descargar|exportar|snapshot|full screen|pantalla completa|exploration)",
@@ -57,6 +61,9 @@ class QlikClient:
         # La generación del Excel en el servidor puede tardar varios minutos
         # cuando hay mucha carga (la tabla tiene ~140 mil filas)
         self.export_timeout_ms = int(cfg.get("export_timeout_seconds", 300)) * 1000
+        # A veces la exportación queda colgada en el servidor: se cancela
+        # y se reintenta este número total de veces
+        self.export_reintentos = int(cfg.get("export_reintentos", 3))
 
     # ------------------------------------------------------------------
     def descargar_tabla(self) -> Path:
@@ -338,8 +345,31 @@ class QlikClient:
 
     # ------------------------------------------------------------------
     def _exportar_datos(self, page: Page, objeto) -> Path:
-        """Abre el menú del objeto y ejecuta 'Descargar como... > Datos'."""
-        log.info("Abriendo menú del objeto...")
+        """Exporta la tabla, cancelando y reintentando si el servidor se cuelga."""
+        ultimo_error: Exception | None = None
+        for intento in range(1, self.export_reintentos + 1):
+            try:
+                return self._exportar_una_vez(page, objeto, intento)
+            except _ExportacionColgada as e:
+                ultimo_error = e
+                log.warning(
+                    "Intento %d/%d: %s Se cancela y se reintenta.",
+                    intento, self.export_reintentos, e,
+                )
+                self._cancelar_exportacion(page)
+                time.sleep(10)
+
+        raise RuntimeError(
+            f"La exportación falló en {self.export_reintentos} intentos "
+            f"({ultimo_error}). Puede ser un problema del servidor de Qlik: "
+            "reintentá más tarde o subí export_timeout_seconds/export_reintentos "
+            "en config.yaml."
+        )
+
+    # ------------------------------------------------------------------
+    def _exportar_una_vez(self, page: Page, objeto, intento: int) -> Path:
+        """Un ciclo completo: menú -> exportar -> esperar link -> descargar."""
+        log.info("Abriendo menú del objeto (exportación, intento %d)...", intento)
         self._abrir_menu_objeto(page, objeto)
         time.sleep(1)
         self._screenshot(page, "03_menu_abierto")
@@ -355,7 +385,6 @@ class QlikClient:
             log.info("No apareció el submenú de datos; se asume exportación directa.")
 
         # Diálogo "Exporting data..." -> esperar el link de descarga.
-        # La generación puede tardar varios minutos con el servidor cargado.
         log.info(
             "Esperando que Qlik genere el archivo (hasta %d segundos)...",
             self.export_timeout_ms // 1000,
@@ -371,19 +400,15 @@ class QlikClient:
                 pass
             try:
                 if page.get_by_text(re_fallo).first.is_visible():
-                    raise RuntimeError("Qlik informó un error al generar la exportación.")
-            except PlaywrightTimeout:
-                pass
-            except RuntimeError:
+                    raise _ExportacionColgada("Qlik informó un error al generar la exportación.")
+            except (_ExportacionColgada,):
                 raise
             except Exception:
                 pass
             if time.monotonic() >= fin:
-                raise RuntimeError(
+                raise _ExportacionColgada(
                     "Qlik no terminó de generar el archivo en "
-                    f"{self.export_timeout_ms // 1000}s (quedó en 'Exporting data...'). "
-                    "Puede ser carga del servidor: subí qlik.export_timeout_seconds "
-                    "en config.yaml o reintentá más tarde."
+                    f"{self.export_timeout_ms // 1000}s (quedó en 'Exporting data...')."
                 )
             time.sleep(2)
         self._screenshot(page, "05_dialogo_exportacion")
@@ -395,6 +420,22 @@ class QlikClient:
         destino = self.download_dir / f"limites_disponibles_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
         download.save_as(destino)
         return destino
+
+    # ------------------------------------------------------------------
+    def _cancelar_exportacion(self, page: Page) -> None:
+        """Cierra el diálogo 'Exporting data...' con el botón Cancel."""
+        try:
+            boton = page.locator(".lui-dialog button", has_text=re.compile(r"cancel", re.IGNORECASE)).first
+            if boton.count() > 0 and boton.is_visible():
+                boton.click(timeout=5_000)
+                log.info("Exportación cancelada con el botón Cancel.")
+        except Exception:
+            log.warning("No se pudo clickear Cancel; se cierra con Escape.")
+        try:
+            page.keyboard.press("Escape")
+            time.sleep(1)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     def _screenshot(self, page: Page, nombre: str) -> None:

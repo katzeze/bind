@@ -26,6 +26,10 @@ qlik:
   # (con el servidor cargado puede tardar varios minutos)
   export_timeout_seconds: 300
 
+  # Si la exportación queda colgada ("Exporting data..." sin terminar),
+  # se cancela y se reintenta hasta este número total de veces
+  export_reintentos: 3
+
 # -------------------------------------------------------------
 # Columnas esperadas en el Excel exportado desde Qlik.
 # Se buscan sin distinguir mayúsculas ni acentos; se puede poner
